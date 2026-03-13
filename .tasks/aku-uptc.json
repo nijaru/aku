@@ -1,0 +1,24 @@
+{
+  "project": "aku",
+  "ref": "uptc",
+  "title": "Consolidate handoff.md into ai docs",
+  "description": "Review new handoff.md, merge any unique planning context into ai docs/README as needed, and delete handoff.md if redundant.",
+  "status": "done",
+  "priority": 2,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-03-13T11:53:54.854Z",
+      "msg": "Reviewed handoff.md, preserved the unique repo-bootstrap and task-tracker state in ai/STATUS.md, and deleted handoff.md because it had become redundant and partially stale versus ai/{STATUS,DESIGN,DECISIONS}.md."
+    }
+  ],
+  "created_at": "2026-03-13T11:53:08.863Z",
+  "updated_at": "2026-03-13T11:53:54.855Z",
+  "completed_at": "2026-03-13T11:53:54.855Z",
+  "external": {}
+}

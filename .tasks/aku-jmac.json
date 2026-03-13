@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "jmac",
+  "title": "Implement Body extraction in internal/bind",
+  "description": "JSON decode request body into the Body struct field.",
+  "status": "open",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-13T12:34:26.296Z",
+  "updated_at": "2026-03-13T12:34:26.296Z",
+  "completed_at": null,
+  "external": {}
+}

@@ -1,0 +1,24 @@
+{
+  "project": "aku",
+  "ref": "l64h",
+  "title": "Improve public README",
+  "description": "Rewrite README for initial public presentation using go-clob-client README as tone/structure reference while staying honest about current project status.",
+  "status": "done",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-03-13T11:47:30.849Z",
+      "msg": "Rewrote README to better match the repo's pre-implementation state, clarified conceptual API examples, and aligned public project framing with near-term milestones."
+    }
+  ],
+  "created_at": "2026-03-13T11:45:44.148Z",
+  "updated_at": "2026-03-13T11:47:43.344Z",
+  "completed_at": "2026-03-13T11:47:43.344Z",
+  "external": {}
+}

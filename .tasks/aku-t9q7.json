@@ -1,0 +1,24 @@
+{
+  "project": "aku",
+  "ref": "t9q7",
+  "title": "Perfect planning docs",
+  "description": "Resolve remaining design ambiguities in ai docs: route options, public error API, server startup stance, and future OpenAPI metadata compatibility.",
+  "status": "done",
+  "priority": 2,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [
+    {
+      "ts": "2026-03-13T11:57:53.601Z",
+      "msg": "Resolved remaining planning ambiguities: no App.Listen in MVP, minimal route options, explicit non-200 success policy, canonical *Problem error API, and future OpenAPI metadata requirements. Also aligned README and STATUS with those decisions."
+    }
+  ],
+  "created_at": "2026-03-13T11:55:56.116Z",
+  "updated_at": "2026-03-13T11:57:53.602Z",
+  "completed_at": "2026-03-13T11:57:53.602Z",
+  "external": {}
+}

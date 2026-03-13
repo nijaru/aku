@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "otio",
+  "title": "Implement basic net/http router wrapper",
+  "description": null,
+  "status": "done",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-13T11:34:52.914Z",
+  "updated_at": "2026-03-13T12:08:13.176Z",
+  "completed_at": "2026-03-13T12:08:13.176Z",
+  "external": {}
+}
