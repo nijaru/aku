@@ -4,9 +4,9 @@ High-performance, idiomatic Go web framework designed specifically for building 
 
 ## Project Structure
 
-| Directory | Purpose |
-| --------- | ------- |
-| `docs/`   | User/team documentation |
+| Directory | Purpose                                                        |
+| --------- | -------------------------------------------------------------- |
+| `docs/`   | User/team documentation                                        |
 | `ai/`     | Local-only AI session context excluded via `.git/info/exclude` |
 | `.tasks/` | Local-only task tracker state excluded via `.git/info/exclude` |
 
@@ -30,26 +30,29 @@ High-performance, idiomatic Go web framework designed specifically for building 
 
 ## Technology Stack
 
-| Component | Technology |
-| --------- | ---------- |
-| Language | Go 1.22+ |
-| Module path | `github.com/nijaru/aku` |
-| First public package | `github.com/nijaru/aku` |
-| HTTP | `net/http` (Go 1.22 ServeMux) |
-| Testing | `go test` |
-| Formatting | `go fmt` |
+| Component            | Technology                         |
+| -------------------- | ---------------------------------- |
+| Language             | Go 1.22+                           |
+| Module path          | `github.com/nijaru/aku`            |
+| First public package | `github.com/nijaru/aku`            |
+| HTTP                 | `net/http` (Go 1.22 ServeMux)      |
+| Testing              | `go test`                          |
+| Formatting           | `golines --base-formatter gofumpt` |
 
 ## Commands
 
 ```bash
-# Format
-go fmt ./...
+# Format (only tracked files)
+make fmt
 
 # Test
-go test ./...
+make test
 
 # Build
-go build ./...
+make build
+
+# Format + test + build
+make check
 
 # Tidy module metadata
 go mod tidy
@@ -59,18 +62,18 @@ go mod tidy
 
 Commands that should pass before shipping:
 
-- Build: `go build ./...`
-- Tests: `go test ./...`
-- Format: `go fmt ./...`
+- Build: `make build`
+- Tests: `make test`
+- Format: `make fmt`
 
 ## Code Standards
 
-| Aspect | Standard |
-| ------ | -------- |
-| Base | Idiomatic Go, adhering to standard `net/http` patterns |
-| Performance | Zero-allocation reflection where possible, `sync.Pool` |
+| Aspect        | Standard                                                      |
+| ------------- | ------------------------------------------------------------- |
+| Base          | Idiomatic Go, adhering to standard `net/http` patterns        |
+| Performance   | Zero-allocation reflection where possible, `sync.Pool`        |
 | Extensibility | Do not force ORMs or Auth. Standard `http.Handler` everywhere |
-| Errors | Return properly formatted JSON errors automatically |
+| Errors        | Return properly formatted JSON errors automatically           |
 
 ## Examples
 
