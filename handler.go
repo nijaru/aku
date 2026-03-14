@@ -3,6 +3,8 @@ package aku
 import (
 	"context"
 	"net/http"
+
+	"github.com/nijaru/aku/internal/bind"
 )
 
 // Handler is the canonical typed handler signature.
@@ -14,6 +16,7 @@ type RouteOption func(*routeMeta)
 type routeMeta struct {
 	status     int
 	middleware []func(http.Handler) http.Handler
+	schema     *bind.Schema
 }
 
 func defaultRouteMeta() routeMeta {

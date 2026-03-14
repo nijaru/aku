@@ -1,6 +1,13 @@
 package aku
 
-import "net/http"
+import (
+	"errors"
+	"net/http"
+	"reflect"
+
+	"github.com/nijaru/aku/internal/bind"
+	"github.com/nijaru/aku/internal/render"
+)
 
 // Get registers a new GET route on the application.
 func Get[In any, Out any](app *App, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
@@ -14,15 +21,72 @@ func Post[In any, Out any](app *App, pattern string, handler Handler[In, Out], o
 
 func register[In any, Out any](app *App, method, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
 	meta := defaultRouteMeta()
+
+	// Compile the extractor and schema once at startup.
+	extractor, schema := bind.Compiler[In]()
+	meta.schema = schema
+
 	for _, opt := range opts {
 		opt(&meta)
 	}
 
-	// For scaffolding MVP: The internal planning logic and actual handler invocation
-	// are not yet wired up. We register a placeholder.
-	app.mux.HandleFunc(method+" "+pattern, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
+	// Define the wrapper handler.
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in In
+		v := reflect.ValueOf(&in).Elem()
+
+		// 1. Extract and bind parameters.
+		if err := extractor(r.Context(), r, v); err != nil {
+			var bindErr *bind.BindError
+			if errors.As(err, &bindErr) {
+				prob := ValidationProblem("Request extraction or validation failed", []InvalidParam{
+					{
+						Name:   bindErr.Field,
+						In:     bindErr.Source,
+						Reason: bindErr.Err.Error(),
+					},
+				})
+				render.Problem(w, prob.Status, prob)
+			} else {
+				var prob *Problem
+				if errors.As(err, &prob) {
+					render.Problem(w, prob.Status, prob)
+				} else {
+					render.Problem(w, http.StatusBadRequest, BadRequest(err.Error()))
+				}
+			}
+			return
+		}
+
+		// 2. Call the user handler.
+		out, err := handler(r.Context(), in)
+		if err != nil {
+			var prob *Problem
+			if errors.As(err, &prob) {
+				render.Problem(w, prob.Status, prob)
+			} else {
+				// Wrap unexpected application errors into a 500 Internal Server Error problem.
+				render.Problem(w, http.StatusInternalServerError, Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error()))
+			}
+			return
+		}
+
+		// 3. Render success response.
+		if meta.status == http.StatusNoContent {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		render.JSON(w, meta.status, out)
 	})
+
+	// Apply route-local middleware.
+	var finalHandler http.Handler = h
+	for i := len(meta.middleware) - 1; i >= 0; i-- {
+		finalHandler = meta.middleware[i](finalHandler)
+	}
+
+	// Register the handler with the mux.
+	app.mux.Handle(method+" "+pattern, finalHandler)
 
 	return nil
 }
