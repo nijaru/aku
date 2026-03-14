@@ -1,6 +1,7 @@
 package aku
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"reflect"
@@ -8,6 +9,38 @@ import (
 	"github.com/nijaru/aku/internal/bind"
 	"github.com/nijaru/aku/internal/render"
 )
+
+// Handler is the canonical typed handler signature.
+type Handler[In any, Out any] func(context.Context, In) (Out, error)
+
+// RouteOption configures a specific route at registration time.
+type RouteOption func(*routeMeta)
+
+type routeMeta struct {
+	status     int
+	middleware []func(http.Handler) http.Handler
+	schema     *bind.Schema
+}
+
+func defaultRouteMeta() routeMeta {
+	return routeMeta{
+		status: http.StatusOK,
+	}
+}
+
+// WithStatus overrides the success HTTP status code for a route.
+func WithStatus(code int) RouteOption {
+	return func(m *routeMeta) {
+		m.status = code
+	}
+}
+
+// WithMiddleware adds route-local middleware to the handler.
+func WithMiddleware(mw ...func(http.Handler) http.Handler) RouteOption {
+	return func(m *routeMeta) {
+		m.middleware = append(m.middleware, mw...)
+	}
+}
 
 // Get registers a new GET route on the application.
 func Get[In any, Out any](app *App, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
