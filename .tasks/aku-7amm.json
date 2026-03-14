@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "7amm",
+  "title": "Support pointer types in internal/bind",
+  "description": "Enable optional fields in Path, Query, and Header by supporting pointers to basic types.",
+  "status": "done",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-13T13:04:55.435Z",
+  "updated_at": "2026-03-13T13:05:27.505Z",
+  "completed_at": "2026-03-13T13:05:27.505Z",
+  "external": {}
+}

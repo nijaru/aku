@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "2ntx",
+  "title": "Support slice types in Query and Header",
+  "description": "Enable binding multiple values from query parameters or headers into slices.",
+  "status": "done",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-13T13:05:27.530Z",
+  "updated_at": "2026-03-13T13:06:03.270Z",
+  "completed_at": "2026-03-13T13:06:03.270Z",
+  "external": {}
+}

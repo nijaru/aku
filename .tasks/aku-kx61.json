@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "kx61",
+  "title": "Integrate binder into route registration",
+  "description": "Update register function in route.go to use bind.Compiler and invoke the extractor at runtime.",
+  "status": "done",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-13T12:38:31.912Z",
+  "updated_at": "2026-03-13T12:39:09.673Z",
+  "completed_at": "2026-03-13T12:39:09.673Z",
+  "external": {}
+}

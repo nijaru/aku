@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "e3h5",
+  "title": "Implement validation hooks",
+  "description": "Call Validate() error if input struct implements it after extraction.",
+  "status": "done",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-13T12:38:10.570Z",
+  "updated_at": "2026-03-13T12:38:29.200Z",
+  "completed_at": "2026-03-13T12:38:29.200Z",
+  "external": {}
+}

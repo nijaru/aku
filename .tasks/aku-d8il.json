@@ -3,7 +3,7 @@
   "ref": "d8il",
   "title": "Implement string-to-type coercion for bind",
   "description": "Common logic for parsing strings from Path/Query/Header into typed struct fields.",
-  "status": "open",
+  "status": "done",
   "priority": 3,
   "labels": [],
   "assignees": [],
@@ -13,7 +13,7 @@
   "due_date": null,
   "logs": [],
   "created_at": "2026-03-13T12:34:26.208Z",
-  "updated_at": "2026-03-13T12:34:26.208Z",
-  "completed_at": null,
+  "updated_at": "2026-03-13T12:38:07.046Z",
+  "completed_at": "2026-03-13T12:38:07.046Z",
   "external": {}
 }
