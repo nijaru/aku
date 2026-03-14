@@ -7,7 +7,8 @@ type Option func(*App)
 
 // App is the core framework application, wrapping a standard library HTTP multiplexer.
 type App struct {
-	mux *http.ServeMux
+	mux        *http.ServeMux
+	middleware []func(http.Handler) http.Handler
 }
 
 // New creates a new Aku application.
@@ -23,7 +24,16 @@ func New(opts ...Option) *App {
 	return a
 }
 
+// Use adds global middleware to the application.
+func (a *App) Use(mw ...func(http.Handler) http.Handler) {
+	a.middleware = append(a.middleware, mw...)
+}
+
 // ServeHTTP implements the standard library http.Handler interface.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	a.mux.ServeHTTP(w, r)
+	var finalHandler http.Handler = a.mux
+	for i := len(a.middleware) - 1; i >= 0; i-- {
+		finalHandler = a.middleware[i](finalHandler)
+	}
+	finalHandler.ServeHTTP(w, r)
 }
