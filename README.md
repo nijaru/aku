@@ -1,11 +1,11 @@
 # Aku
 
 > [!WARNING]
-> In development. Aku is an experimental Go API framework and the repository is still in the design and scaffolding stage. The examples below show the intended direction, not a stable public API you can drop into production today.
+> In development. Aku is an experimental Go API library and the repository is still in the design and scaffolding stage. The examples below show the intended direction, not a stable public API you can drop into production today.
 
-Aku is a stdlib-first Go framework for building JSON APIs with typed handlers, automatic request extraction, and a cleaner path to validation, error responses, and OpenAPI generation.
+Aku is a Go library for building JSON APIs with typed handlers, automatic request extraction, and a cleaner path to validation, error responses, and OpenAPI generation.
 
-The project goal is simple: keep `net/http` interoperability, borrow the best handler ergonomics from frameworks like Axum and FastAPI, and stay honest about what the standard library already does well.
+The project goal is simple: keep `net/http` interoperability, provide ergonomic typed handler patterns, and stay honest about what the standard library already does well.
 
 ## Status
 
@@ -13,7 +13,7 @@ The project goal is simple: keep `net/http` interoperability, borrow the best ha
 - The next implementation milestones are a thin router wrapper and the first generic handler pipeline.
 - The README is ahead of the code on purpose so the public direction is clear, but the API is not finalized yet.
 
-If you need a production-ready Go API framework today, use an established option. If you want a Go-native exploration of typed API ergonomics on top of `net/http`, that is what Aku is being built for.
+If you need a production-ready Go API library today, use an established option. If you want a Go-native exploration of typed API ergonomics on top of `net/http`, that is what Aku is being built for.
 
 ## Install
 
@@ -84,11 +84,11 @@ That snippet is illustrative only. The core idea is:
 
 - route with the standard library
 - describe request data with explicit structs
-- let the framework handle extraction and JSON response formatting, with validation hooks fitting into the same pipeline
+- let the library handle extraction and JSON response formatting, with validation hooks fitting into the same pipeline
 
 ## Design Goals
 
-- Stay compatible with the Go ecosystem instead of wrapping everything in framework-specific abstractions.
+- Stay compatible with the Go ecosystem instead of wrapping everything in library-specific abstractions.
 - Make the happy path for JSON APIs feel concise without hiding the underlying HTTP model.
 - Keep the public surface small and predictable.
 - Generate useful API metadata from explicit handler types rather than handwritten schemas.
