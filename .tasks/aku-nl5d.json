@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "nl5d",
+  "title": "Add route-level middleware tests",
+  "description": "Add more comprehensive tests for WithMiddleware to ensure correct execution order.",
+  "status": "open",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-14T11:27:23.288Z",
+  "updated_at": "2026-03-14T11:27:23.288Z",
+  "completed_at": null,
+  "external": {}
+}
