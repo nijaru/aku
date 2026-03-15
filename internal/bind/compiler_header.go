@@ -92,32 +92,37 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 		fieldIdx := i
 		fieldName := name
 
-		steps = append(steps, func(header http.Header, v reflect.Value) error {
-			f := v.Field(fieldIdx)
-			if isSlice {
+		if isSlice {
+			elemCoercer := PrecompileCoercer(field.Type.Elem())
+			sliceTyp := field.Type
+			steps = append(steps, func(header http.Header, v reflect.Value) error {
 				vals := header[fieldName]
 				if len(vals) > 0 {
-					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
+					f := v.Field(fieldIdx)
+					slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
 					for i, val := range vals {
-						if err := coerce(val, slice.Index(i)); err != nil {
+						if err := elemCoercer(val, slice.Index(i)); err != nil {
 							return &BindError{Field: fieldName, Source: "header", Err: err}
 						}
 					}
 					f.Set(slice)
 				}
-			} else if isMap {
-				// For headers, we support prefix matching if the tag ends with -
-				// or name[key] style if it's a standard map name.
-				isPrefix := fieldName[len(fieldName)-1] == '-'
-				m := reflect.MakeMap(f.Type())
+				return nil
+			})
+		} else if isMap {
+			elemCoercer := PrecompileCoercer(field.Type.Elem())
+			mapTyp := field.Type
+			isPrefix := fieldName[len(fieldName)-1] == '-'
+			steps = append(steps, func(header http.Header, v reflect.Value) error {
+				m := reflect.MakeMap(mapTyp)
 				found := false
 				for k, vals := range header {
 					if isPrefix {
 						if len(k) > len(fieldName) && k[:len(fieldName)] == fieldName {
 							key := k[len(fieldName):]
 							val := vals[0]
-							valVal := reflect.New(f.Type().Elem()).Elem()
-							if err := coerce(val, valVal); err != nil {
+							valVal := reflect.New(mapTyp.Elem()).Elem()
+							if err := elemCoercer(val, valVal); err != nil {
 								return &BindError{Field: k, Source: "header", Err: err}
 							}
 							m.SetMapIndex(reflect.ValueOf(key), valVal)
@@ -128,8 +133,8 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 						if len(k) > len(mapPrefix)+1 && k[:len(mapPrefix)] == mapPrefix && k[len(k)-1] == ']' {
 							key := k[len(mapPrefix) : len(k)-1]
 							val := vals[0]
-							valVal := reflect.New(f.Type().Elem()).Elem()
-							if err := coerce(val, valVal); err != nil {
+							valVal := reflect.New(mapTyp.Elem()).Elem()
+							if err := elemCoercer(val, valVal); err != nil {
 								return &BindError{Field: k, Source: "header", Err: err}
 							}
 							m.SetMapIndex(reflect.ValueOf(key), valVal)
@@ -138,18 +143,22 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 					}
 				}
 				if found {
-					f.Set(m)
+					v.Field(fieldIdx).Set(m)
 				}
-			} else {
+				return nil
+			})
+		} else {
+			coercer := PrecompileCoercer(field.Type)
+			steps = append(steps, func(header http.Header, v reflect.Value) error {
 				val := header.Get(fieldName)
 				if val != "" {
-					if err := coerce(val, f); err != nil {
+					if err := coercer(val, v.Field(fieldIdx)); err != nil {
 						return &BindError{Field: fieldName, Source: "header", Err: err}
 					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
+		}
 
 		params = append(params, Parameter{
 			Name:     name,

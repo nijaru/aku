@@ -22,88 +22,123 @@ var (
 	urlType             = reflect.TypeOf(url.URL{})
 )
 
-// coerce converts a string value into the target reflect.Value's type.
-func coerce(s string, v reflect.Value) error {
-	typ := v.Type()
+// Coercer is a function that converts a string value into a target reflect.Value.
+type Coercer func(string, reflect.Value) error
 
-	if v.Kind() != reflect.Pointer || !v.IsNil() {
-		if typ.Implements(binderType) {
-			return v.Interface().(Binder).UnmarshalAku(s)
+// PrecompileCoercer creates a specialized coercer for the given type once at startup.
+func PrecompileCoercer(typ reflect.Type) Coercer {
+	// Pointers
+	if typ.Kind() == reflect.Pointer {
+		elemTyp := typ.Elem()
+		subCoercer := PrecompileCoercer(elemTyp)
+		return func(s string, v reflect.Value) error {
+			if v.IsNil() {
+				v.Set(reflect.New(elemTyp))
+			}
+			return subCoercer(s, v.Elem())
 		}
-		if typ.Implements(textUnmarshalerType) {
+	}
+
+	// TextUnmarshaler
+	if typ.Implements(textUnmarshalerType) {
+		return func(s string, v reflect.Value) error {
 			return v.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(s))
 		}
 	}
-
-	if v.CanAddr() {
-		addr := v.Addr()
-		if addr.Type().Implements(binderType) {
-			return addr.Interface().(Binder).UnmarshalAku(s)
-		}
-		if addr.Type().Implements(textUnmarshalerType) {
-			return addr.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(s))
+	if reflect.PointerTo(typ).Implements(textUnmarshalerType) {
+		return func(s string, v reflect.Value) error {
+			if !v.CanAddr() {
+				return fmt.Errorf("cannot address value to call UnmarshalText")
+			}
+			return v.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(s))
 		}
 	}
 
-	if v.Kind() == reflect.Pointer {
-		// Create a new value of the underlying type and coerce the string into it.
-		elemTyp := typ.Elem()
-		newVal := reflect.New(elemTyp).Elem()
-		if err := coerce(s, newVal); err != nil {
-			return err
+	// Binder
+	if typ.Implements(binderType) {
+		return func(s string, v reflect.Value) error {
+			return v.Interface().(Binder).UnmarshalAku(s)
 		}
-		// Set the pointer to point to the newly created value.
-		v.Set(newVal.Addr())
-		return nil
+	}
+	if reflect.PointerTo(typ).Implements(binderType) {
+		return func(s string, v reflect.Value) error {
+			if !v.CanAddr() {
+				return fmt.Errorf("cannot address value to call UnmarshalAku")
+			}
+			return v.Addr().Interface().(Binder).UnmarshalAku(s)
+		}
 	}
 
-	// Specialized types that don't implement TextUnmarshaler or need specific handling
+	// Specialized types
 	if typ == durationType {
-		d, err := time.ParseDuration(s)
-		if err != nil {
-			return fmt.Errorf("invalid duration: %w", err)
+		return func(s string, v reflect.Value) error {
+			d, err := time.ParseDuration(s)
+			if err != nil {
+				return fmt.Errorf("invalid duration: %w", err)
+			}
+			v.SetInt(int64(d))
+			return nil
 		}
-		v.Set(reflect.ValueOf(d))
-		return nil
 	}
 	if typ == urlType {
-		u, err := url.Parse(s)
-		if err != nil {
-			return fmt.Errorf("invalid url: %w", err)
+		return func(s string, v reflect.Value) error {
+			u, err := url.Parse(s)
+			if err != nil {
+				return fmt.Errorf("invalid url: %w", err)
+			}
+			v.Set(reflect.ValueOf(*u))
+			return nil
 		}
-		v.Set(reflect.ValueOf(*u))
-		return nil
 	}
 
-	switch v.Kind() {
+	switch typ.Kind() {
 	case reflect.String:
-		v.SetString(s)
+		return func(s string, v reflect.Value) error {
+			v.SetString(s)
+			return nil
+		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid integer: %w", err)
+		return func(s string, v reflect.Value) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid integer: %w", err)
+			}
+			if v.OverflowInt(i) {
+				return fmt.Errorf("integer overflow")
+			}
+			v.SetInt(i)
+			return nil
 		}
-		if v.OverflowInt(i) {
-			return fmt.Errorf("integer overflow")
-		}
-		v.SetInt(i)
 	case reflect.Bool:
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return fmt.Errorf("invalid boolean: %w", err)
+		return func(s string, v reflect.Value) error {
+			b, err := strconv.ParseBool(s)
+			if err != nil {
+				return fmt.Errorf("invalid boolean: %w", err)
+			}
+			v.SetBool(b)
+			return nil
 		}
-		v.SetBool(b)
 	case reflect.Float32, reflect.Float64:
-		f, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			return fmt.Errorf("invalid float: %w", err)
+		return func(s string, v reflect.Value) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return fmt.Errorf("invalid float: %w", err)
+			}
+			if v.OverflowFloat(f) {
+				return fmt.Errorf("float overflow")
+			}
+			v.SetFloat(f)
+			return nil
 		}
-		if v.OverflowFloat(f) {
-			return fmt.Errorf("float overflow")
-		}
-		v.SetFloat(f)
-	default:
-		return fmt.Errorf("unsupported type: %s", v.Type().String())
 	}
-	return nil
+
+	return func(s string, v reflect.Value) error {
+		return fmt.Errorf("unsupported type: %s", typ.String())
+	}
+}
+
+// coerce converts a string value into the target reflect.Value's type.
+// Keep for backward compatibility or simple cases, but PrecompileCoercer is preferred.
+func coerce(s string, v reflect.Value) error {
+	return PrecompileCoercer(v.Type())(s, v)
 }

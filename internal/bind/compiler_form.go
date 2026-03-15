@@ -13,8 +13,14 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error { return nil }, nil
 	}
 
-	var infos []fieldInfo
-	var fileInfos []fieldInfo
+	type formInfo struct {
+		idx     int
+		name    string
+		isSlice bool
+		coercer Coercer
+	}
+	var infos []formInfo
+	var fileInfos []formInfo
 	var params []Parameter
 
 	fileHeaderType := reflect.TypeOf((*multipart.FileHeader)(nil))
@@ -28,9 +34,18 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 		}
 
 		if field.Type == fileHeaderType || field.Type == fileHeaderSliceType {
-			fileInfos = append(fileInfos, fieldInfo{idx: i, name: tag, isSlice: field.Type.Kind() == reflect.Slice})
+			fileInfos = append(fileInfos, formInfo{idx: i, name: tag, isSlice: field.Type.Kind() == reflect.Slice})
 		} else {
-			infos = append(infos, fieldInfo{idx: i, name: tag, isSlice: field.Type.Kind() == reflect.Slice})
+			elemTyp := field.Type
+			if field.Type.Kind() == reflect.Slice {
+				elemTyp = field.Type.Elem()
+			}
+			infos = append(infos, formInfo{
+				idx:     i,
+				name:    tag,
+				isSlice: field.Type.Kind() == reflect.Slice,
+				coercer: PrecompileCoercer(elemTyp),
+			})
 		}
 
 		params = append(params, Parameter{
@@ -59,7 +74,7 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 					f := section.Field(info.idx)
 					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
 					for i, val := range vals {
-						if err := coerce(val, slice.Index(i)); err != nil {
+						if err := info.coercer(val, slice.Index(i)); err != nil {
 							return &BindError{Field: info.name, Source: "form", Err: err}
 						}
 					}
@@ -68,7 +83,7 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 			} else {
 				val := r.PostFormValue(info.name)
 				if val != "" {
-					if err := coerce(val, section.Field(info.idx)); err != nil {
+					if err := info.coercer(val, section.Field(info.idx)); err != nil {
 						return &BindError{Field: info.name, Source: "form", Err: err}
 					}
 				}
