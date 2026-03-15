@@ -3,6 +3,7 @@ package aku
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"reflect"
 
@@ -140,6 +141,31 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+
+		// Handle streaming and special types
+		switch v := any(out).(type) {
+		case io.Reader:
+			render.Reader(w, meta.status, v, "application/octet-stream")
+			return
+		case Stream:
+			render.Reader(w, meta.status, v.Reader, v.ContentType)
+			return
+		case SSE:
+			events := make(chan render.SSEEvent)
+			go func() {
+				defer close(events)
+				for e := range v.Events {
+					events <- render.SSEEvent{
+						ID:    e.ID,
+						Event: e.Event,
+						Data:  e.Data,
+					}
+				}
+			}()
+			render.SSE(w, r, events)
+			return
+		}
+
 		render.JSON(w, meta.status, out)
 	})
 

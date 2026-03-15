@@ -3,7 +3,9 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/nijaru/aku/internal/bind"
@@ -61,10 +63,17 @@ type MediaType struct {
 type Schema struct {
 	Ref                  string            `json:"$ref,omitempty"`
 	Type                 string            `json:"type,omitempty"`
+	Format               string            `json:"format,omitempty"`
 	Properties           map[string]Schema `json:"properties,omitempty"`
 	AdditionalProperties *Schema           `json:"additionalProperties,omitempty"`
 	Items                *Schema           `json:"items,omitempty"`
 	Required             []string          `json:"required,omitempty"`
+	Minimum              *float64          `json:"minimum,omitempty"`
+	Maximum              *float64          `json:"maximum,omitempty"`
+	MinLength            *int              `json:"minLength,omitempty"`
+	MaxLength            *int              `json:"maxLength,omitempty"`
+	Pattern              string            `json:"pattern,omitempty"`
+	Enum                 []any             `json:"enum,omitempty"`
 }
 
 // JSON returns the JSON representation of the document.
@@ -113,24 +122,55 @@ func Generate(title, version string, routes []Route) *Document {
 			Responses:   make(map[string]Response),
 		}
 
-		// Parameters
+		// Parameters (path, query, header)
 		schema := r.GetSchema()
 		for _, p := range schema.Parameters {
+			if p.In == "form" {
+				continue // handled below
+			}
+			ps := g.reflectToSchema(p.Type)
+			g.applyValidation(&ps, p.Validate)
 			op.Parameters = append(op.Parameters, Parameter{
 				Name:     p.Name,
 				In:       p.In,
 				Required: p.Required,
-				Schema:   g.reflectToSchema(p.Type),
+				Schema:   ps,
 			})
 		}
 
-		// Request Body
+		// Request Body (JSON or Form)
 		if schema.Body != nil {
 			op.RequestBody = &RequestBody{
 				Content: map[string]MediaType{
 					"application/json": {
 						Schema: g.reflectToSchema(schema.Body),
 					},
+				},
+			}
+		}
+
+		// Collect Form parameters into a multipart/form-data body
+		formProps := make(map[string]Schema)
+		var formRequired []string
+		for _, p := range schema.Parameters {
+			if p.In == "form" {
+				ps := g.reflectToSchema(p.Type)
+				g.applyValidation(&ps, p.Validate)
+				formProps[p.Name] = ps
+				if p.Required {
+					formRequired = append(formRequired, p.Name)
+				}
+			}
+		}
+		if len(formProps) > 0 {
+			if op.RequestBody == nil {
+				op.RequestBody = &RequestBody{Content: make(map[string]MediaType)}
+			}
+			op.RequestBody.Content["multipart/form-data"] = MediaType{
+				Schema: Schema{
+					Type:       "object",
+					Properties: formProps,
+					Required:   formRequired,
 				},
 			}
 		}
@@ -146,9 +186,26 @@ func Generate(title, version string, routes []Route) *Document {
 
 		outputType := r.GetOutputType()
 		if status != 204 && outputType != nil {
+			mediaType := "application/json"
+			outSchema := g.reflectToSchema(outputType)
+
+			// Detect streaming types
+			name := outputType.Name()
+			pkg := outputType.PkgPath()
+			if (name == "Reader" && pkg == "io") || (name == "ReadCloser" && pkg == "io") {
+				mediaType = "application/octet-stream"
+				outSchema = Schema{Type: "string", Format: "binary"}
+			} else if name == "Stream" && strings.HasSuffix(pkg, "aku") {
+				mediaType = "*/*" // could be anything
+				outSchema = Schema{Type: "string", Format: "binary"}
+			} else if name == "SSE" && strings.HasSuffix(pkg, "aku") {
+				mediaType = "text/event-stream"
+				outSchema = Schema{Type: "string"}
+			}
+
 			res.Content = map[string]MediaType{
-				"application/json": {
-					Schema: g.reflectToSchema(outputType),
+				mediaType: {
+					Schema: outSchema,
 				},
 			}
 		}
@@ -168,6 +225,14 @@ type generator struct {
 func (g *generator) reflectToSchema(t reflect.Type) Schema {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
+	}
+
+	// Special check for common binary types
+	if t.Name() == "FileHeader" && t.PkgPath() == "mime/multipart" {
+		return Schema{Type: "string", Format: "binary"}
+	}
+	if t.Implements(reflect.TypeOf((*io.Reader)(nil)).Elem()) {
+		return Schema{Type: "string", Format: "binary"}
 	}
 
 	switch t.Kind() {
@@ -201,6 +266,61 @@ func (g *generator) reflectToSchema(t reflect.Type) Schema {
 		return Schema{Type: "object", AdditionalProperties: &props}
 	default:
 		return Schema{Type: "string"}
+	}
+}
+
+func (g *generator) applyValidation(s *Schema, tag string) {
+	if tag == "" {
+		return
+	}
+	parts := strings.Split(tag, ",")
+	for _, part := range parts {
+		kv := strings.Split(part, "=")
+		key := kv[0]
+		var val string
+		if len(kv) > 1 {
+			val = kv[1]
+		}
+
+		switch key {
+		case "min":
+			if s.Type == "string" {
+				if v, err := strconv.Atoi(val); err == nil {
+					s.MinLength = &v
+				}
+			} else if s.Type == "integer" || s.Type == "number" {
+				if v, err := strconv.ParseFloat(val, 64); err == nil {
+					s.Minimum = &v
+				}
+			}
+		case "max":
+			if s.Type == "string" {
+				if v, err := strconv.Atoi(val); err == nil {
+					s.MaxLength = &v
+				}
+			} else if s.Type == "integer" || s.Type == "number" {
+				if v, err := strconv.ParseFloat(val, 64); err == nil {
+					s.Maximum = &v
+				}
+			}
+		case "email":
+			s.Format = "email"
+		case "uuid":
+			s.Format = "uuid"
+		case "url":
+			s.Format = "url"
+		case "hostname":
+			s.Format = "hostname"
+		case "ipv4":
+			s.Format = "ipv4"
+		case "ipv6":
+			s.Format = "ipv6"
+		case "oneof":
+			options := strings.Split(val, " ")
+			for _, opt := range options {
+				s.Enum = append(s.Enum, opt)
+			}
+		}
 	}
 }
 

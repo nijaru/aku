@@ -3,6 +3,7 @@ package aku_test
 import (
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"testing"
 
 	"github.com/nijaru/aku"
@@ -84,3 +85,52 @@ func TestOpenAPI(t *testing.T) {
 		t.Error("expected UserResponse in components/schemas")
 	}
 }
+
+func TestOpenAPI_Advanced(t *testing.T) {
+	app := aku.New()
+
+	type AdvancedRequest struct {
+		Query struct {
+			Age int `query:"age" validate:"min=18,max=120"`
+		}
+		Form struct {
+			Name   string                `form:"name" validate:"required"`
+			Avatar *multipart.FileHeader `form:"avatar"`
+		}
+	}
+
+	aku.Post(app, "/advanced", func(ctx context.Context, in AdvancedRequest) (aku.SSE, error) {
+		return aku.SSE{}, nil
+	})
+
+	doc := app.OpenAPI("Advanced API", "1.1.0")
+	path := doc.Paths["/advanced"]["post"]
+
+	// Verify validation on Query
+	ageParam := path.Parameters[0]
+	if ageParam.Name != "age" {
+		t.Fatalf("expected age param, got %s", ageParam.Name)
+	}
+	if *ageParam.Schema.Minimum != 18 || *ageParam.Schema.Maximum != 120 {
+		t.Errorf("expected age validation 18-120, got min=%v, max=%v", *ageParam.Schema.Minimum, *ageParam.Schema.Maximum)
+	}
+
+	// Verify Form in RequestBody
+	formBody := path.RequestBody.Content["multipart/form-data"]
+	if formBody.Schema.Type != "object" {
+		t.Errorf("expected object form body, got %s", formBody.Schema.Type)
+	}
+	if formBody.Schema.Properties["avatar"].Format != "binary" {
+		t.Errorf("expected binary avatar, got format %s", formBody.Schema.Properties["avatar"].Format)
+	}
+	if len(formBody.Schema.Required) != 1 || formBody.Schema.Required[0] != "name" {
+		t.Errorf("expected name to be required in form, got %v", formBody.Schema.Required)
+	}
+
+	// Verify SSE Response
+	res := path.Responses["200"]
+	if _, ok := res.Content["text/event-stream"]; !ok {
+		t.Errorf("expected text/event-stream response, got %v", res.Content)
+	}
+}
+
