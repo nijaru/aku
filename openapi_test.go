@@ -35,7 +35,7 @@ func TestOpenAPI(t *testing.T) {
 		aku.WithTags("Users"),
 	)
 
-	doc := app.OpenAPI("My API", "1.0.0")
+	doc := app.OpenAPIDocument("My API", "1.0.0")
 	if doc.Info.Title != "My API" {
 		t.Errorf("expected title My API, got %s", doc.Info.Title)
 	}
@@ -103,7 +103,7 @@ func TestOpenAPI_Advanced(t *testing.T) {
 		return aku.SSE{}, nil
 	})
 
-	doc := app.OpenAPI("Advanced API", "1.1.0")
+	doc := app.OpenAPIDocument("Advanced API", "1.1.0")
 	path := doc.Paths["/advanced"]["post"]
 
 	// Verify validation on Query

@@ -31,7 +31,7 @@ func TestOpenAPI_Security(t *testing.T) {
 		return "multi", nil
 	}, aku.WithSecurity(map[string][]string{"BearerAuth": {}, "ApiKeyAuth": {}}))
 
-	doc := app.OpenAPI("Security API", "1.0.0")
+	doc := app.OpenAPIDocument("Security API", "1.0.0")
 
 	// Verify Security Schemes
 	if _, ok := doc.Components.SecuritySchemes["BearerAuth"]; !ok {

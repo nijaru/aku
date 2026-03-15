@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 
 	"github.com/nijaru/aku/internal/bind"
@@ -42,9 +41,8 @@ func TestCompiler_OptionalFields(t *testing.T) {
 		req.Header.Set("X-Trace-Id", "trace-123")
 
 		var in OptionalRequest
-		v := reflect.ValueOf(&in).Elem()
 
-		if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
+		if err := extractor(context.Background(), req, &in, &bind.Config{}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -60,9 +58,8 @@ func TestCompiler_OptionalFields(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 
 		var in OptionalRequest
-		v := reflect.ValueOf(&in).Elem()
 
-		if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
+		if err := extractor(context.Background(), req, &in, &bind.Config{}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -93,9 +90,8 @@ func TestCompiler_SliceFields(t *testing.T) {
 	req.Header.Add("X-Values", "20")
 
 	var in SliceRequest
-	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
+	if err := extractor(context.Background(), req, &in, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -158,9 +154,8 @@ func TestCompiler_Validation(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", body)
 	
 	var in ValidationRequest
-	v := reflect.ValueOf(&in).Elem()
 
-	err := extractor(context.Background(), req, v, &bind.Config{})
+	err := extractor(context.Background(), req, &in, &bind.Config{})
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
@@ -172,9 +167,8 @@ func TestCompiler_Validation(t *testing.T) {
 	body = bytes.NewBufferString(`{"age": 21}`)
 	req = httptest.NewRequest(http.MethodPost, "/", body)
 	in = ValidationRequest{}
-	v = reflect.ValueOf(&in).Elem()
 
-	err = extractor(context.Background(), req, v, &bind.Config{})
+	err = extractor(context.Background(), req, &in, &bind.Config{})
 	if err != nil {
 		t.Fatalf("unexpected validation error: %v", err)
 	}
@@ -208,9 +202,8 @@ func TestCompiler_FullExtraction(t *testing.T) {
 	req.SetPathValue("id", "123")
 
 	var in FullRequest
-	v := reflect.ValueOf(&in).Elem()
 
-	err := extractor(context.Background(), req, v, &bind.Config{})
+	err := extractor(context.Background(), req, &in, &bind.Config{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -249,9 +242,8 @@ func TestCompiler_CoercionErrors(t *testing.T) {
 	req.SetPathValue("id", "abc") // Not an integer
 
 	var in PathRequest
-	v := reflect.ValueOf(&in).Elem()
 
-	err := extractor(context.Background(), req, v, &bind.Config{})
+	err := extractor(context.Background(), req, &in, &bind.Config{})
 	if err == nil {
 		t.Fatal("expected error for invalid integer coercion, got nil")
 	}
@@ -277,9 +269,8 @@ func TestCompiler_MapFields(t *testing.T) {
 	req.Header.Set("tags[legacy]", "false")
 
 	var in MapRequest
-	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
+	if err := extractor(context.Background(), req, &in, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -318,9 +309,8 @@ func TestCompiler_NestedStructs(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/?page[size]=10&page[number]=1&filter[name]=aku", nil)
 	var in NestedRequest
-	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
+	if err := extractor(context.Background(), req, &in, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -347,9 +337,8 @@ func TestCompiler_NestedStructsPointer(t *testing.T) {
 	// 1. Present
 	req := httptest.NewRequest(http.MethodGet, "/?filter[name]=aku", nil)
 	var in NestedRequest
-	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
+	if err := extractor(context.Background(), req, &in, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -360,8 +349,7 @@ func TestCompiler_NestedStructsPointer(t *testing.T) {
 	// 2. Absent
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	in = NestedRequest{}
-	v = reflect.ValueOf(&in).Elem()
-	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
+	if err := extractor(context.Background(), req, &in, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if in.Query.Filter != nil {
@@ -387,9 +375,8 @@ func TestCompiler_NestedHeaders(t *testing.T) {
 	req.Header.Set("X-Config[X-Ver]", "v1")
 
 	var in NestedRequest
-	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
+	if err := extractor(context.Background(), req, &in, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

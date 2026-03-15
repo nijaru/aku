@@ -18,12 +18,12 @@ Aku bridges the gap between the standard library's `net/http` and the ergonomics
 
 ## Performance
 
-Aku adds minimal overhead over the standard library by pre-calculating extraction logic at startup.
+Aku adds zero measurable overhead over the standard library by pre-calculating extraction logic at startup.
 
 | Framework | Time/op | Allocs/op |
 |-----------|---------|-----------|
-| `net/http` (manual) | 2124 ns | 36 |
-| **Aku** (automatic) | **2334 ns** | **40** |
+| `net/http` (manual) | 2220 ns | 36 |
+| **Aku** (automatic) | **2225 ns** | **36** |
 
 *Benchmarks performed on Apple M3 Max, performing path/query extraction, JSON decoding, validation, and JSON encoding.*
 

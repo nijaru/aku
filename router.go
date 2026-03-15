@@ -113,17 +113,18 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		opt(&meta)
 	}
 
+	// Pre-determine response type for optimization.
+	outType := reflect.TypeOf((*Out)(nil)).Elem()
+	isReader := outType.Implements(reflect.TypeOf((*io.Reader)(nil)).Elem())
+	isStream := outType == reflect.TypeOf(Stream{})
+	isSSE := outType == reflect.TypeOf(SSE{})
+
 	// Define the wrapper handler.
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var in In
-		v := reflect.ValueOf(&in).Elem()
-
-		cfg := &bind.Config{
-			MaxMultipartMemory: app.MaxMultipartMemory,
-		}
 
 		// 1. Extract and bind parameters.
-		if err := extractor(r.Context(), r, v, cfg); err != nil {
+		if err := extractor(r.Context(), r, &in, app.bindConfig); err != nil {
 			var bindErr *bind.BindError
 			if errors.As(err, &bindErr) {
 				handleError(app, w, r, ValidationProblem("Request extraction or validation failed", []InvalidParam{
@@ -164,21 +165,24 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 			return
 		}
 
-		// 3. Render success response.
+		// 4. Render success response.
 		if meta.status == http.StatusNoContent {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
 		// Handle streaming and special types
-		switch v := any(out).(type) {
-		case io.Reader:
-			render.Reader(w, meta.status, v, "application/octet-stream")
+		if isReader {
+			render.Reader(w, meta.status, any(out).(io.Reader), "application/octet-stream")
 			return
-		case Stream:
-			render.Reader(w, meta.status, v.Reader, v.ContentType)
+		}
+		if isStream {
+			s := any(out).(Stream)
+			render.Reader(w, meta.status, s.Reader, s.ContentType)
 			return
-		case SSE:
+		}
+		if isSSE {
+			sse := any(out).(SSE)
 			events := make(chan render.SSEEvent)
 			go func() {
 				defer close(events)
@@ -186,7 +190,7 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 					select {
 					case <-r.Context().Done():
 						return
-					case e, ok := <-v.Events:
+					case e, ok := <-sse.Events:
 						if !ok {
 							return
 						}
@@ -228,7 +232,7 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		Tags:        meta.tags,
 		Security:    meta.security,
 		Schema:      schema,
-		OutputType:  reflect.TypeOf((*Out)(nil)).Elem(),
+		OutputType:  outType,
 		middleware:  meta.middleware,
 	})
 

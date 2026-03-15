@@ -20,7 +20,7 @@ func TestOpenAPI_Recursion(t *testing.T) {
 	app := aku.New()
 	aku.Get(app, "/node", GetNode)
 
-	doc := app.OpenAPI("Recursion API", "1.0.0")
+	doc := app.OpenAPIDocument("Recursion API", "1.0.0")
 
 	// Check components
 	key := "github.com.nijaru.aku_test.Node"
