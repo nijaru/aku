@@ -81,7 +81,7 @@ func TestOpenAPI(t *testing.T) {
 	// Verify components
 	components := raw["components"].(map[string]any)
 	schemas := components["schemas"].(map[string]any)
-	if _, ok := schemas["UserResponse"]; !ok {
+	if _, ok := schemas["github.com.nijaru.aku_test.UserResponse"]; !ok {
 		t.Error("expected UserResponse in components/schemas")
 	}
 }

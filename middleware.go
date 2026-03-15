@@ -53,3 +53,9 @@ func (w *loggingResponseWriter) Write(b []byte) (int, error) {
 	w.size += n
 	return n, err
 }
+
+func (w *loggingResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}

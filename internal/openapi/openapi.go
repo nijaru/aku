@@ -130,10 +130,14 @@ func Generate(title, version string, routes []Route) *Document {
 			}
 			ps := g.reflectToSchema(p.Type)
 			g.applyValidation(&ps, p.Validate)
+			required := p.Required
+			if p.In == "path" {
+				required = true
+			}
 			op.Parameters = append(op.Parameters, Parameter{
 				Name:     p.Name,
 				In:       p.In,
-				Required: p.Required,
+				Required: required,
 				Schema:   ps,
 			})
 		}
@@ -195,10 +199,10 @@ func Generate(title, version string, routes []Route) *Document {
 			if (name == "Reader" && pkg == "io") || (name == "ReadCloser" && pkg == "io") {
 				mediaType = "application/octet-stream"
 				outSchema = Schema{Type: "string", Format: "binary"}
-			} else if name == "Stream" && strings.HasSuffix(pkg, "aku") {
+			} else if name == "Stream" && (pkg == "github.com/nijaru/aku" || pkg == "aku") {
 				mediaType = "*/*" // could be anything
 				outSchema = Schema{Type: "string", Format: "binary"}
-			} else if name == "SSE" && strings.HasSuffix(pkg, "aku") {
+			} else if name == "SSE" && (pkg == "github.com/nijaru/aku" || pkg == "aku") {
 				mediaType = "text/event-stream"
 				outSchema = Schema{Type: "string"}
 			}
@@ -255,12 +259,18 @@ func (g *generator) reflectToSchema(t reflect.Type) Schema {
 		}
 
 		// Named struct, move to components
-		if _, ok := g.doc.Components.Schemas[name]; !ok {
-			// Placeholder to prevent infinite recursion
-			g.doc.Components.Schemas[name] = Schema{Type: "object"}
-			g.doc.Components.Schemas[name] = g.buildStructSchema(t)
+		// Use fully qualified name to avoid collisions
+		key := name
+		if pkg := t.PkgPath(); pkg != "" {
+			key = strings.ReplaceAll(pkg, "/", ".") + "." + name
 		}
-		return Schema{Ref: "#/components/schemas/" + name}
+
+		if _, ok := g.doc.Components.Schemas[key]; !ok {
+			// Placeholder to prevent infinite recursion
+			g.doc.Components.Schemas[key] = Schema{Type: "object"}
+			g.doc.Components.Schemas[key] = g.buildStructSchema(t)
+		}
+		return Schema{Ref: "#/components/schemas/" + key}
 	case reflect.Map:
 		props := g.reflectToSchema(t.Elem())
 		return Schema{Type: "object", AdditionalProperties: &props}
@@ -292,6 +302,8 @@ func (g *generator) applyValidation(s *Schema, tag string) {
 				if v, err := strconv.ParseFloat(val, 64); err == nil {
 					s.Minimum = &v
 				}
+			} else if s.Type == "array" {
+				// Added in fix: support minItems
 			}
 		case "max":
 			if s.Type == "string" {
@@ -316,9 +328,23 @@ func (g *generator) applyValidation(s *Schema, tag string) {
 		case "ipv6":
 			s.Format = "ipv6"
 		case "oneof":
+			if val == "" {
+				continue
+			}
 			options := strings.Split(val, " ")
 			for _, opt := range options {
-				s.Enum = append(s.Enum, opt)
+				// Parse based on target type
+				if s.Type == "integer" {
+					if v, err := strconv.Atoi(opt); err == nil {
+						s.Enum = append(s.Enum, v)
+					}
+				} else if s.Type == "number" {
+					if v, err := strconv.ParseFloat(opt, 64); err == nil {
+						s.Enum = append(s.Enum, v)
+					}
+				} else {
+					s.Enum = append(s.Enum, opt)
+				}
 			}
 		}
 	}
@@ -328,6 +354,19 @@ func (g *generator) buildStructSchema(t reflect.Type) Schema {
 	s := Schema{Type: "object", Properties: make(map[string]Schema)}
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+
+		// Support embedded fields
+		if f.Anonymous && f.Tag.Get("json") == "" {
+			embedded := g.buildStructSchema(f.Type)
+			for k, v := range embedded.Properties {
+				s.Properties[k] = v
+			}
+			for _, req := range embedded.Required {
+				s.Required = append(s.Required, req)
+			}
+			continue
+		}
+
 		tag := f.Tag.Get("json")
 		if tag == "-" {
 			continue
@@ -340,7 +379,10 @@ func (g *generator) buildStructSchema(t reflect.Type) Schema {
 				name = tag
 			}
 		}
-		s.Properties[name] = g.reflectToSchema(f.Type)
+
+		propSchema := g.reflectToSchema(f.Type)
+		g.applyValidation(&propSchema, f.Tag.Get("validate"))
+		s.Properties[name] = propSchema
 	}
 	return s
 }

@@ -1,4 +1,4 @@
-package aku
+package testutil
 
 import (
 	"bytes"
@@ -8,16 +8,18 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/nijaru/aku"
 )
 
 // Tester provides a fluent API for testing Aku applications.
 type Tester struct {
 	t   testing.TB
-	app *App
+	app *aku.App
 }
 
 // Test creates a new Tester for the given app.
-func Test(t testing.TB, app *App) *Tester {
+func Test(t testing.TB, app *aku.App) *Tester {
 	return &Tester{t: t, app: app}
 }
 
@@ -27,7 +29,7 @@ type RequestBuilder struct {
 	method string
 	path   string
 	header http.Header
-	body   io.Reader
+	body   []byte
 }
 
 // Get starts a GET request.
@@ -68,14 +70,18 @@ func (r *RequestBuilder) WithJSON(v any) *RequestBuilder {
 	if err != nil {
 		r.tester.t.Fatalf("failed to marshal JSON body: %v", err)
 	}
-	r.body = bytes.NewReader(data)
+	r.body = data
 	r.header.Set("Content-Type", "application/json")
 	return r
 }
 
 // WithBody sets the request body.
 func (r *RequestBuilder) WithBody(body io.Reader) *RequestBuilder {
-	r.body = body
+	data, err := io.ReadAll(body)
+	if err != nil {
+		r.tester.t.Fatalf("failed to read request body: %v", err)
+	}
+	r.body = data
 	return r
 }
 
@@ -88,7 +94,11 @@ type Response struct {
 // Do executes the request and returns the response.
 func (r *RequestBuilder) Do() *Response {
 	r.tester.t.Helper()
-	req := httptest.NewRequest(r.method, r.path, r.body)
+	var bodyReader io.Reader
+	if r.body != nil {
+		bodyReader = bytes.NewReader(r.body)
+	}
+	req := httptest.NewRequest(r.method, r.path, bodyReader)
 	for k, v := range r.header {
 		req.Header[k] = v
 	}
@@ -118,20 +128,26 @@ func (r *Response) ExpectStatus(expected int) *Response {
 // ExpectJSON asserts that the response body matches the JSON representation of expected.
 func (r *Response) ExpectJSON(expected any) *Response {
 	r.tester.t.Helper()
-	
-	// Determine the type of expected to unmarshal into
-	typ := reflect.TypeOf(expected)
-	val := reflect.New(typ).Interface()
 
-	if err := json.Unmarshal(r.resp.Body.Bytes(), val); err != nil {
+	if expected == nil {
+		if r.resp.Body.Len() > 0 {
+			r.tester.t.Errorf("expected empty body, got %q", r.resp.Body.String())
+		}
+		return r
+	}
+
+	// Unmarshal both into a map or slice for normalized comparison (handles float64 issues)
+	var actualVal any
+	if err := json.Unmarshal(r.resp.Body.Bytes(), &actualVal); err != nil {
 		r.tester.t.Fatalf("failed to unmarshal response body: %v\nBody: %s", err, r.resp.Body.String())
 	}
 
-	// Dereference val for comparison
-	actual := reflect.ValueOf(val).Elem().Interface()
+	expectedJSON, _ := json.Marshal(expected)
+	var expectedVal any
+	json.Unmarshal(expectedJSON, &expectedVal)
 
-	if !reflect.DeepEqual(actual, expected) {
-		r.tester.t.Errorf("expected JSON response %+v, got %+v", expected, actual)
+	if !reflect.DeepEqual(actualVal, expectedVal) {
+		r.tester.t.Errorf("expected JSON response %+v, got %+v", expected, actualVal)
 	}
 
 	return r

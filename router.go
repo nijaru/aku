@@ -78,6 +78,7 @@ func Post[In any, Out any](app *App, pattern string, handler Handler[In, Out], o
 	return register(app, http.MethodPost, pattern, handler, opts...)
 }
 
+// register registers a new route with the application.
 func register[In any, Out any](app *App, method, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
 	meta := defaultRouteMeta()
 
@@ -154,11 +155,23 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 			events := make(chan render.SSEEvent)
 			go func() {
 				defer close(events)
-				for e := range v.Events {
-					events <- render.SSEEvent{
-						ID:    e.ID,
-						Event: e.Event,
-						Data:  e.Data,
+				for {
+					select {
+					case <-r.Context().Done():
+						return
+					case e, ok := <-v.Events:
+						if !ok {
+							return
+						}
+						select {
+						case <-r.Context().Done():
+							return
+						case events <- render.SSEEvent{
+							ID:    e.ID,
+							Event: e.Event,
+							Data:  e.Data,
+						}:
+						}
 					}
 				}
 			}()
@@ -188,6 +201,7 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		Tags:        meta.tags,
 		Schema:      schema,
 		OutputType:  reflect.TypeOf((*Out)(nil)).Elem(),
+		middleware:  meta.middleware,
 	})
 
 	return nil

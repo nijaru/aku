@@ -210,8 +210,11 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 			fTyp = fTyp.Elem()
 		}
 
-		// Support recursion for structs that are not Custom Binders
-		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !fTyp.Implements(binderType) && !reflect.PointerTo(fTyp).Implements(binderType) {
+		// Support recursion for structs that are not Custom Binders and do not implement TextUnmarshaler
+		isBinder := fTyp.Implements(binderType) || reflect.PointerTo(fTyp).Implements(binderType)
+		isText := fTyp.Implements(textUnmarshalerType) || reflect.PointerTo(fTyp).Implements(textUnmarshalerType)
+
+		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !isBinder && !isText {
 			subSteps, subParams := compileQueryLevel(fTyp, name)
 			subPrefix := name + "["
 			steps = append(steps, func(q url.Values, v reflect.Value) error {
@@ -349,8 +352,11 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 			fTyp = fTyp.Elem()
 		}
 
-		// Support recursion for structs that are not Custom Binders
-		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !fTyp.Implements(binderType) && !reflect.PointerTo(fTyp).Implements(binderType) {
+		// Support recursion for structs that are not Custom Binders and do not implement TextUnmarshaler
+		isBinder := fTyp.Implements(binderType) || reflect.PointerTo(fTyp).Implements(binderType)
+		isText := fTyp.Implements(textUnmarshalerType) || reflect.PointerTo(fTyp).Implements(textUnmarshalerType)
+
+		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !isBinder && !isText {
 			subSteps, subParams := compileHeaderLevel(fTyp, name)
 			subPrefix := name + "["
 			steps = append(steps, func(h http.Header, v reflect.Value) error {
@@ -521,7 +527,7 @@ func compileForm(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 		// Regular form values
 		for _, info := range infos {
 			if info.isSlice {
-				vals := r.Form[info.name]
+				vals := r.PostForm[info.name]
 				if len(vals) > 0 {
 					f := section.Field(info.idx)
 					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
@@ -533,7 +539,7 @@ func compileForm(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 					f.Set(slice)
 				}
 			} else {
-				val := r.FormValue(info.name)
+				val := r.PostFormValue(info.name)
 				if val != "" {
 					if err := coerce(val, section.Field(info.idx)); err != nil {
 						return &BindError{Field: info.name, Source: "form", Err: err}
