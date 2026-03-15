@@ -3,7 +3,7 @@
   "ref": "i8x3",
   "title": "Support map types in internal/bind",
   "description": "Enable binding key-value pairs from query parameters into map fields.",
-  "status": "open",
+  "status": "done",
   "priority": 3,
   "labels": [],
   "assignees": [],
@@ -13,7 +13,7 @@
   "due_date": null,
   "logs": [],
   "created_at": "2026-03-14T11:27:23.269Z",
-  "updated_at": "2026-03-14T11:27:23.269Z",
-  "completed_at": null,
+  "updated_at": "2026-03-15T08:16:13.761Z",
+  "completed_at": "2026-03-15T08:16:13.761Z",
   "external": {}
 }

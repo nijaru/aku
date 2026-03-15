@@ -119,6 +119,7 @@ type fieldInfo struct {
 	idx     int
 	name    string
 	isSlice bool
+	isMap   bool
 }
 
 // compilePath creates an Extractor for the Path section of the request struct.
@@ -173,6 +174,7 @@ func compileQuery(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 				idx:     i,
 				name:    tag,
 				isSlice: field.Type.Kind() == reflect.Slice,
+				isMap:   field.Type.Kind() == reflect.Map,
 			})
 			params = append(params, Parameter{
 				Name:     tag,
@@ -187,10 +189,10 @@ func compileQuery(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 		section := v.Field(sectionIdx)
 		query := r.URL.Query()
 		for _, info := range infos {
+			f := section.Field(info.idx)
 			if info.isSlice {
 				vals := query[info.name]
 				if len(vals) > 0 {
-					f := section.Field(info.idx)
 					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
 					for i, val := range vals {
 						if err := coerce(val, slice.Index(i)); err != nil {
@@ -199,10 +201,30 @@ func compileQuery(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 					}
 					f.Set(slice)
 				}
+			} else if info.isMap {
+				// Support name[key]=val pattern for maps
+				prefix := info.name + "["
+				m := reflect.MakeMap(f.Type())
+				found := false
+				for k, vals := range query {
+					if len(k) > len(prefix)+1 && k[:len(prefix)] == prefix && k[len(k)-1] == ']' {
+						key := k[len(prefix) : len(k)-1]
+						val := vals[0] // take first for map
+						valVal := reflect.New(f.Type().Elem()).Elem()
+						if err := coerce(val, valVal); err != nil {
+							return &BindError{Field: info.name + "[" + key + "]", Source: "query", Err: err}
+						}
+						m.SetMapIndex(reflect.ValueOf(key), valVal)
+						found = true
+					}
+				}
+				if found {
+					f.Set(m)
+				}
 			} else {
 				val := query.Get(info.name)
 				if val != "" {
-					if err := coerce(val, section.Field(info.idx)); err != nil {
+					if err := coerce(val, f); err != nil {
 						return &BindError{Field: info.name, Source: "query", Err: err}
 					}
 				}
@@ -228,6 +250,7 @@ func compileHeader(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 				idx:     i,
 				name:    tag,
 				isSlice: field.Type.Kind() == reflect.Slice,
+				isMap:   field.Type.Kind() == reflect.Map,
 			})
 			params = append(params, Parameter{
 				Name:     tag,
@@ -241,10 +264,10 @@ func compileHeader(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 	return func(ctx context.Context, r *http.Request, v reflect.Value) error {
 		section := v.Field(sectionIdx)
 		for _, info := range infos {
+			f := section.Field(info.idx)
 			if info.isSlice {
 				vals := r.Header[info.name]
 				if len(vals) > 0 {
-					f := section.Field(info.idx)
 					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
 					for i, val := range vals {
 						if err := coerce(val, slice.Index(i)); err != nil {
@@ -253,10 +276,45 @@ func compileHeader(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 					}
 					f.Set(slice)
 				}
+			} else if info.isMap {
+				// For headers, we support prefix matching if the tag ends with -
+				// or name[key] style if it's a standard map name.
+				isPrefix := info.name[len(info.name)-1] == '-'
+				m := reflect.MakeMap(f.Type())
+				found := false
+				for k, vals := range r.Header {
+					if isPrefix {
+						if len(k) > len(info.name) && k[:len(info.name)] == info.name {
+							key := k[len(info.name):]
+							val := vals[0]
+							valVal := reflect.New(f.Type().Elem()).Elem()
+							if err := coerce(val, valVal); err != nil {
+								return &BindError{Field: k, Source: "header", Err: err}
+							}
+							m.SetMapIndex(reflect.ValueOf(key), valVal)
+							found = true
+						}
+					} else {
+						prefix := info.name + "["
+						if len(k) > len(prefix)+1 && k[:len(prefix)] == prefix && k[len(k)-1] == ']' {
+							key := k[len(prefix) : len(k)-1]
+							val := vals[0]
+							valVal := reflect.New(f.Type().Elem()).Elem()
+							if err := coerce(val, valVal); err != nil {
+								return &BindError{Field: k, Source: "header", Err: err}
+							}
+							m.SetMapIndex(reflect.ValueOf(key), valVal)
+							found = true
+						}
+					}
+				}
+				if found {
+					f.Set(m)
+				}
 			} else {
 				val := r.Header.Get(info.name)
 				if val != "" {
-					if err := coerce(val, section.Field(info.idx)); err != nil {
+					if err := coerce(val, f); err != nil {
 						return &BindError{Field: info.name, Source: "header", Err: err}
 					}
 				}

@@ -256,3 +256,46 @@ func TestCompiler_CoercionErrors(t *testing.T) {
 		t.Fatal("expected error for invalid integer coercion, got nil")
 	}
 }
+func TestCompiler_MapFields(t *testing.T) {
+	type MapRequest struct {
+		Query struct {
+			Filters map[string]string `query:"filter"`
+			Scores  map[string]int    `query:"score"`
+		}
+		Header struct {
+			Metadata map[string]string `header:"X-Meta-"`
+			Tags     map[string]bool   `header:"tags"`
+		}
+	}
+
+	extractor, _ := bind.Compiler[MapRequest]()
+
+	req := httptest.NewRequest(http.MethodGet, "/?filter[name]=nick&filter[type]=admin&score[rank]=1&score[lvl]=99", nil)
+	req.Header.Set("X-Meta-Source", "github")
+	req.Header.Set("X-Meta-Env", "prod")
+	req.Header.Set("tags[verified]", "true")
+	req.Header.Set("tags[legacy]", "false")
+
+	var in MapRequest
+	v := reflect.ValueOf(&in).Elem()
+
+	if err := extractor(context.Background(), req, v); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify Query Maps
+	if in.Query.Filters["name"] != "nick" || in.Query.Filters["type"] != "admin" {
+		t.Errorf("unexpected Query.Filters: %v", in.Query.Filters)
+	}
+	if in.Query.Scores["rank"] != 1 || in.Query.Scores["lvl"] != 99 {
+		t.Errorf("unexpected Query.Scores: %v", in.Query.Scores)
+	}
+
+	// Verify Header Maps
+	if in.Header.Metadata["Source"] != "github" || in.Header.Metadata["Env"] != "prod" {
+		t.Errorf("unexpected Header.Metadata: %v", in.Header.Metadata)
+	}
+	if !in.Header.Tags["verified"] || in.Header.Tags["legacy"] {
+		t.Errorf("unexpected Header.Tags: %v", in.Header.Tags)
+	}
+}
