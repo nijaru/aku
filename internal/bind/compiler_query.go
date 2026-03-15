@@ -95,30 +95,37 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 		fieldIdx := i
 		fieldName := name
 
-		steps = append(steps, func(query url.Values, v reflect.Value) error {
-			f := v.Field(fieldIdx)
-			if isSlice {
+		if isSlice {
+			elemCoercer := PrecompileCoercer(field.Type.Elem())
+			sliceTyp := field.Type
+			steps = append(steps, func(query url.Values, v reflect.Value) error {
 				vals := query[fieldName]
 				if len(vals) > 0 {
-					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
+					f := v.Field(fieldIdx)
+					slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
 					for i, val := range vals {
-						if err := coerce(val, slice.Index(i)); err != nil {
+						if err := elemCoercer(val, slice.Index(i)); err != nil {
 							return &BindError{Field: fieldName, Source: "query", Err: err}
 						}
 					}
 					f.Set(slice)
 				}
-			} else if isMap {
+				return nil
+			})
+		} else if isMap {
+			elemCoercer := PrecompileCoercer(field.Type.Elem())
+			mapTyp := field.Type
+			steps = append(steps, func(query url.Values, v reflect.Value) error {
 				// Support name[key]=val pattern for maps
 				prefix := fieldName + "["
-				m := reflect.MakeMap(f.Type())
+				m := reflect.MakeMap(mapTyp)
 				found := false
 				for k, vals := range query {
 					if len(k) > len(prefix)+1 && k[:len(prefix)] == prefix && k[len(k)-1] == ']' {
 						key := k[len(prefix) : len(k)-1]
 						val := vals[0] // take first for map
-						valVal := reflect.New(f.Type().Elem()).Elem()
-						if err := coerce(val, valVal); err != nil {
+						valVal := reflect.New(mapTyp.Elem()).Elem()
+						if err := elemCoercer(val, valVal); err != nil {
 							return &BindError{Field: fieldName + "[" + key + "]", Source: "query", Err: err}
 						}
 						m.SetMapIndex(reflect.ValueOf(key), valVal)
@@ -126,18 +133,22 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 					}
 				}
 				if found {
-					f.Set(m)
+					v.Field(fieldIdx).Set(m)
 				}
-			} else {
+				return nil
+			})
+		} else {
+			coercer := PrecompileCoercer(field.Type)
+			steps = append(steps, func(query url.Values, v reflect.Value) error {
 				val := query.Get(fieldName)
 				if val != "" {
-					if err := coerce(val, f); err != nil {
+					if err := coercer(val, v.Field(fieldIdx)); err != nil {
 						return &BindError{Field: fieldName, Source: "query", Err: err}
 					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
+		}
 
 		params = append(params, Parameter{
 			Name:     name,

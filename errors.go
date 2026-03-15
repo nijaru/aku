@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/nijaru/aku/internal/render"
 )
 
 // InvalidParam represents a detailed validation or parsing failure for a single input parameter.
@@ -88,16 +89,11 @@ func FromValidationErrors(errs validator.ValidationErrors) []InvalidParam {
 }
 
 func defaultErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	var prob *Problem
-	if errors.As(err, &prob) {
-		// Already a problem, just use its status
-	} else {
+	prob, ok := errors.AsType[*Problem](err)
+	if !ok {
 		// Wrap unexpected application errors into a 500 Internal Server Error problem.
 		prob = Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error())
 	}
 
-	// We'll need access to the renderer here, or just use http.Error/json.NewEncoder
-	// Since this is in the main package, we can import render if we want, or just do it here.
-	// But it's better to keep rendering logic unified.
-	// I'll assume we can call something from internal/render or similar.
+	render.Problem(w, prob.Status, prob)
 }

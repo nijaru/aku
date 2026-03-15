@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"sync"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/nijaru/aku/internal/bind"
@@ -119,14 +120,26 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 	isStream := outType == reflect.TypeOf(Stream{})
 	isSSE := outType == reflect.TypeOf(SSE{})
 
+	// Pool for input structs to minimize allocations.
+	pool := sync.Pool{
+		New: func() any {
+			return new(In)
+		},
+	}
+
 	// Define the wrapper handler.
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var in In
+		in := pool.Get().(*In)
+		defer func() {
+			// Zero out the struct before putting it back.
+			var zero In
+			*in = zero
+			pool.Put(in)
+		}()
 
 		// 1. Extract and bind parameters.
-		if err := extractor(r.Context(), r, &in, app.bindConfig); err != nil {
-			var bindErr *bind.BindError
-			if errors.As(err, &bindErr) {
+		if err := extractor(r.Context(), r, in, app.bindConfig); err != nil {
+			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
 				handleError(app, w, r, ValidationProblem("Request extraction or validation failed", []InvalidParam{
 					{
 						Name:   bindErr.Field,
@@ -135,8 +148,7 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 					},
 				}))
 			} else {
-				var prob *Problem
-				if errors.As(err, &prob) {
+				if prob, ok := errors.AsType[*Problem](err); ok {
 					handleError(app, w, r, prob)
 				} else {
 					handleError(app, w, r, BadRequest(err.Error()))
@@ -148,8 +160,7 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		// 2. Run validator if present.
 		if app.validator != nil {
 			if err := app.validator.Struct(in); err != nil {
-				var vErr validator.ValidationErrors
-				if errors.As(err, &vErr) {
+				if vErr, ok := errors.AsType[validator.ValidationErrors](err); ok {
 					handleError(app, w, r, ValidationProblem("Input validation failed", FromValidationErrors(vErr)))
 				} else {
 					handleError(app, w, r, BadRequest(err.Error()))
@@ -159,7 +170,7 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		}
 
 		// 3. Call the user handler.
-		out, err := handler(r.Context(), in)
+		out, err := handler(r.Context(), *in)
 		if err != nil {
 			handleError(app, w, r, err)
 			return
@@ -245,8 +256,7 @@ func handleError(app *App, w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 
-	var prob *Problem
-	if errors.As(err, &prob) {
+	if prob, ok := errors.AsType[*Problem](err); ok {
 		render.Problem(w, prob.Status, prob)
 	} else {
 		// Default behavior for non-Problem errors
