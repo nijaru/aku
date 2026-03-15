@@ -23,6 +23,7 @@ type routeMeta struct {
 	summary     string
 	description string
 	tags        []string
+	security    []map[string][]string
 	middleware  []func(http.Handler) http.Handler
 	schema      *bind.Schema
 }
@@ -68,6 +69,14 @@ func WithTags(tags ...string) RouteOption {
 	}
 }
 
+// WithSecurity adds security requirements to the route.
+// Example: WithSecurity(map[string][]string{"BearerAuth": {}})
+func WithSecurity(security ...map[string][]string) RouteOption {
+	return func(m *routeMeta) {
+		m.security = append(m.security, security...)
+	}
+}
+
 // Get registers a new GET route on the application.
 func Get[In any, Out any](app *App, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
 	return register(app, http.MethodGet, pattern, handler, opts...)
@@ -95,8 +104,12 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		var in In
 		v := reflect.ValueOf(&in).Elem()
 
+		cfg := &bind.Config{
+			MaxMultipartMemory: app.MaxMultipartMemory,
+		}
+
 		// 1. Extract and bind parameters.
-		if err := extractor(r.Context(), r, v); err != nil {
+		if err := extractor(r.Context(), r, v, cfg); err != nil {
 			var bindErr *bind.BindError
 			if errors.As(err, &bindErr) {
 				handleError(app, w, r, ValidationProblem("Request extraction or validation failed", []InvalidParam{
@@ -199,6 +212,7 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		Summary:     meta.summary,
 		Description: meta.description,
 		Tags:        meta.tags,
+		Security:    meta.security,
 		Schema:      schema,
 		OutputType:  reflect.TypeOf((*Out)(nil)).Elem(),
 		middleware:  meta.middleware,

@@ -44,7 +44,7 @@ func TestCompiler_OptionalFields(t *testing.T) {
 		var in OptionalRequest
 		v := reflect.ValueOf(&in).Elem()
 
-		if err := extractor(context.Background(), req, v); err != nil {
+		if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -62,7 +62,7 @@ func TestCompiler_OptionalFields(t *testing.T) {
 		var in OptionalRequest
 		v := reflect.ValueOf(&in).Elem()
 
-		if err := extractor(context.Background(), req, v); err != nil {
+		if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -95,7 +95,7 @@ func TestCompiler_SliceFields(t *testing.T) {
 	var in SliceRequest
 	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v); err != nil {
+	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -160,7 +160,7 @@ func TestCompiler_Validation(t *testing.T) {
 	var in ValidationRequest
 	v := reflect.ValueOf(&in).Elem()
 
-	err := extractor(context.Background(), req, v)
+	err := extractor(context.Background(), req, v, &bind.Config{})
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
@@ -174,7 +174,7 @@ func TestCompiler_Validation(t *testing.T) {
 	in = ValidationRequest{}
 	v = reflect.ValueOf(&in).Elem()
 
-	err = extractor(context.Background(), req, v)
+	err = extractor(context.Background(), req, v, &bind.Config{})
 	if err != nil {
 		t.Fatalf("unexpected validation error: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestCompiler_FullExtraction(t *testing.T) {
 	var in FullRequest
 	v := reflect.ValueOf(&in).Elem()
 
-	err := extractor(context.Background(), req, v)
+	err := extractor(context.Background(), req, v, &bind.Config{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestCompiler_CoercionErrors(t *testing.T) {
 	var in PathRequest
 	v := reflect.ValueOf(&in).Elem()
 
-	err := extractor(context.Background(), req, v)
+	err := extractor(context.Background(), req, v, &bind.Config{})
 	if err == nil {
 		t.Fatal("expected error for invalid integer coercion, got nil")
 	}
@@ -279,7 +279,7 @@ func TestCompiler_MapFields(t *testing.T) {
 	var in MapRequest
 	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v); err != nil {
+	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -320,7 +320,7 @@ func TestCompiler_NestedStructs(t *testing.T) {
 	var in NestedRequest
 	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v); err != nil {
+	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -349,7 +349,7 @@ func TestCompiler_NestedStructsPointer(t *testing.T) {
 	var in NestedRequest
 	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v); err != nil {
+	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -361,7 +361,7 @@ func TestCompiler_NestedStructsPointer(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	in = NestedRequest{}
 	v = reflect.ValueOf(&in).Elem()
-	if err := extractor(context.Background(), req, v); err != nil {
+	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if in.Query.Filter != nil {
@@ -389,7 +389,7 @@ func TestCompiler_NestedHeaders(t *testing.T) {
 	var in NestedRequest
 	v := reflect.ValueOf(&in).Elem()
 
-	if err := extractor(context.Background(), req, v); err != nil {
+	if err := extractor(context.Background(), req, v, &bind.Config{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

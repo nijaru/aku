@@ -8,6 +8,17 @@ import (
 	"github.com/nijaru/aku/internal/openapi"
 )
 
+// SecurityScheme describes an authentication scheme for the API.
+type SecurityScheme struct {
+	Type             string
+	Description      string
+	Name             string // for apiKey
+	In               string // for apiKey: "query", "header", "cookie"
+	Scheme           string // for http
+	BearerFormat     string // for http ("bearer")
+	OpenIdConnectUrl string // for openIdConnect
+}
+
 // Validator is the interface that wraps the basic Validate method.
 type Validator interface {
 	Struct(s any) error
@@ -16,18 +27,18 @@ type Validator interface {
 // ErrorHandler is a function that handles errors returned by handlers or the framework.
 type ErrorHandler func(w http.ResponseWriter, r *http.Request, err error)
 
-
-
 // Option configures an App instance.
 type Option func(*App)
 
 // App is the core framework application, wrapping a standard library HTTP multiplexer.
 type App struct {
-	mux          *http.ServeMux
-	middleware   []func(http.Handler) http.Handler
-	routes       []*Route
-	validator    Validator
-	errorHandler ErrorHandler
+	mux                *http.ServeMux
+	middleware         []func(http.Handler) http.Handler
+	routes             []*Route
+	validator          Validator
+	errorHandler       ErrorHandler
+	securitySchemes    map[string]SecurityScheme
+	MaxMultipartMemory int64
 }
 
 // Route represents a registered route and its metadata.
@@ -38,6 +49,7 @@ type Route struct {
 	Summary     string
 	Description string
 	Tags        []string
+	Security    []map[string][]string
 	Schema      *bind.Schema
 	OutputType  reflect.Type
 	middleware  []func(http.Handler) http.Handler
@@ -49,13 +61,16 @@ func (r *Route) GetStatus() int                 { return r.Status }
 func (r *Route) GetSummary() string             { return r.Summary }
 func (r *Route) GetDescription() string          { return r.Description }
 func (r *Route) GetTags() []string              { return r.Tags }
+func (r *Route) GetSecurity() []map[string][]string { return r.Security }
 func (r *Route) GetSchema() *bind.Schema        { return r.Schema }
 func (r *Route) GetOutputType() reflect.Type    { return r.OutputType }
 
 // New creates a new Aku application.
 func New(opts ...Option) *App {
 	a := &App{
-		mux: http.NewServeMux(),
+		mux:                http.NewServeMux(),
+		securitySchemes:    make(map[string]SecurityScheme),
+		MaxMultipartMemory: 32 << 20, // 32MB default
 	}
 
 	for _, opt := range opts {
@@ -84,9 +99,21 @@ func WithErrorHandler(h ErrorHandler) Option {
 	}
 }
 
+// WithMaxMultipartMemory sets the maximum memory to use for multipart forms.
+func WithMaxMultipartMemory(max int64) Option {
+	return func(a *App) {
+		a.MaxMultipartMemory = max
+	}
+}
+
 // Routes returns the list of registered routes and their metadata.
 func (a *App) Routes() []*Route {
 	return a.routes
+}
+
+// AddSecurityScheme adds a security scheme to the application.
+func (a *App) AddSecurityScheme(name string, scheme SecurityScheme) {
+	a.securitySchemes[name] = scheme
 }
 
 // OpenAPI generates an OpenAPI 3.0 document for the application.
@@ -95,7 +122,21 @@ func (a *App) OpenAPI(title, version string) *openapi.Document {
 	for i, r := range a.routes {
 		iroutes[i] = r
 	}
-	return openapi.Generate(title, version, iroutes)
+
+	schemes := make(map[string]openapi.SecurityScheme)
+	for name, s := range a.securitySchemes {
+		schemes[name] = openapi.SecurityScheme{
+			Type:             s.Type,
+			Description:      s.Description,
+			Name:             s.Name,
+			In:               s.In,
+			Scheme:           s.Scheme,
+			BearerFormat:     s.BearerFormat,
+			OpenIdConnectUrl: s.OpenIdConnectUrl,
+		}
+	}
+
+	return openapi.Generate(title, version, iroutes, schemes)
 }
 
 // OpenAPIHandler returns an http.Handler that serves the OpenAPI JSON specification.
