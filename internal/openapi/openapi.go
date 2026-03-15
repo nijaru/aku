@@ -26,7 +26,18 @@ type Info struct {
 }
 
 type Components struct {
-	Schemas map[string]Schema `json:"schemas,omitempty"`
+	Schemas         map[string]Schema         `json:"schemas,omitempty"`
+	SecuritySchemes map[string]SecurityScheme `json:"securitySchemes,omitempty"`
+}
+
+type SecurityScheme struct {
+	Type             string `json:"type"` // "apiKey", "http", "oauth2", "openIdConnect"
+	Description      string `json:"description,omitempty"`
+	Name             string `json:"name,omitempty"`             // for apiKey
+	In               string `json:"in,omitempty"`               // for apiKey: "query", "header", "cookie"
+	Scheme           string `json:"scheme,omitempty"`           // for http
+	BearerFormat     string `json:"bearerFormat,omitempty"`     // for http ("bearer")
+	OpenIdConnectUrl string `json:"openIdConnectUrl,omitempty"` // for openIdConnect
 }
 
 type PathItem map[string]*Operation
@@ -38,6 +49,7 @@ type Operation struct {
 	Parameters  []Parameter           `json:"parameters,omitempty"`
 	RequestBody *RequestBody          `json:"requestBody,omitempty"`
 	Responses   map[string]Response   `json:"responses"`
+	Security    []map[string][]string `json:"security,omitempty"`
 }
 
 type Parameter struct {
@@ -93,10 +105,11 @@ type Route interface {
 	GetTags() []string
 	GetSchema() *bind.Schema
 	GetOutputType() reflect.Type
+	GetSecurity() []map[string][]string
 }
 
-// Generate builds an OpenAPI document from a list of routes.
-func Generate(title, version string, routes []Route) *Document {
+// Generate builds an OpenAPI document from a list of routes and global security schemes.
+func Generate(title, version string, routes []Route, securitySchemes map[string]SecurityScheme) *Document {
 	g := &generator{
 		doc: &Document{
 			OpenAPI: "3.0.3",
@@ -104,8 +117,11 @@ func Generate(title, version string, routes []Route) *Document {
 				Title:   title,
 				Version: version,
 			},
-			Paths:      make(map[string]PathItem),
-			Components: &Components{Schemas: make(map[string]Schema)},
+			Paths: make(map[string]PathItem),
+			Components: &Components{
+				Schemas:         make(map[string]Schema),
+				SecuritySchemes: securitySchemes,
+			},
 		},
 	}
 
@@ -120,6 +136,7 @@ func Generate(title, version string, routes []Route) *Document {
 			Description: r.GetDescription(),
 			Tags:        r.GetTags(),
 			Responses:   make(map[string]Response),
+			Security:    r.GetSecurity(),
 		}
 
 		// Parameters (path, query, header)

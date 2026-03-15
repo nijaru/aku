@@ -3,7 +3,7 @@
   "ref": "wl6d",
   "title": "Implement OpenAPI Security Documentation",
   "description": "Support SecurityScheme and route-level security requirements",
-  "status": "open",
+  "status": "done",
   "priority": 3,
   "labels": null,
   "assignees": null,
@@ -13,7 +13,7 @@
   "due_date": null,
   "logs": [],
   "created_at": "2026-03-15T13:53:40.77203Z",
-  "updated_at": "2026-03-15T14:07:32.510346Z",
-  "completed_at": null,
+  "updated_at": "2026-03-15T14:16:58.393322Z",
+  "completed_at": "2026-03-15T14:16:58.393322Z",
   "external": {}
 }

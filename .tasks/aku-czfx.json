@@ -3,7 +3,7 @@
   "ref": "czfx",
   "title": "Implement Common Middleware",
   "description": "Add CORS, Recover, and Timeout middleware",
-  "status": "open",
+  "status": "done",
   "priority": 3,
   "labels": null,
   "assignees": null,
@@ -13,7 +13,7 @@
   "due_date": null,
   "logs": [],
   "created_at": "2026-03-15T13:53:40.776277Z",
-  "updated_at": "2026-03-15T14:07:32.500957Z",
-  "completed_at": null,
+  "updated_at": "2026-03-15T14:16:58.379439Z",
+  "completed_at": "2026-03-15T14:16:58.379439Z",
   "external": {}
 }

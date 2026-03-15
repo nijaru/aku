@@ -57,6 +57,11 @@ func (t *Tester) Delete(path string) *RequestBuilder {
 	return &RequestBuilder{tester: t, method: http.MethodDelete, path: path, header: make(http.Header)}
 }
 
+// Options starts an OPTIONS request.
+func (t *Tester) Options(path string) *RequestBuilder {
+	return &RequestBuilder{tester: t, method: http.MethodOptions, path: path, header: make(http.Header)}
+}
+
 // WithHeader adds a header to the request.
 func (r *RequestBuilder) WithHeader(key, value string) *RequestBuilder {
 	r.header.Add(key, value)
