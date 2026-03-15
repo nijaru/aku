@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "wue4",
+  "title": "Implement Global Error Handling",
+  "description": "Add support for custom global JSON error responses.",
+  "status": "done",
+  "priority": 3,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-15T12:59:08.453217Z",
+  "updated_at": "2026-03-15T13:41:16.021261Z",
+  "completed_at": "2026-03-15T13:41:16.021261Z",
+  "external": {}
+}

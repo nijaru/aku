@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "ouqa",
+  "title": "Implement App.OpenAPIHandler()",
+  "description": "Serve the OpenAPI spec or a UI (Swagger/Redoc) via a standard route.",
+  "status": "done",
+  "priority": 3,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-15T08:18:24.499Z",
+  "updated_at": "2026-03-15T08:21:27.446Z",
+  "completed_at": "2026-03-15T08:21:27.446Z",
+  "external": {}
+}

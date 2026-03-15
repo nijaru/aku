@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "zztj",
+  "title": "Implement OpenAPI UI Handler",
+  "description": "Serve Swagger UI or ReDoc via a built-in handler.",
+  "status": "done",
+  "priority": 2,
+  "labels": [],
+  "assignees": [],
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-15T08:26:22.019Z",
+  "updated_at": "2026-03-15T12:51:37.384844Z",
+  "completed_at": "2026-03-15T12:51:37.384844Z",
+  "external": {}
+}

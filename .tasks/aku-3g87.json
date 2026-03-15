@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "3g87",
+  "title": "Refactor internal/bind/compiler.go for modularity",
+  "description": null,
+  "status": "open",
+  "priority": 4,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-15T14:07:58.642288Z",
+  "updated_at": "2026-03-15T14:07:58.642288Z",
+  "completed_at": null,
+  "external": {}
+}

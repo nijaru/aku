@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "o1v0",
+  "title": "Implement Streaming Responses",
+  "description": "Add support for io.Reader, aku.Stream, and SSE",
+  "status": "done",
+  "priority": 2,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-15T13:49:29.186047Z",
+  "updated_at": "2026-03-15T13:49:31.355539Z",
+  "completed_at": "2026-03-15T13:49:31.355539Z",
+  "external": {}
+}

@@ -1,0 +1,19 @@
+{
+  "project": "aku",
+  "ref": "227x",
+  "title": "Make multipart memory limit configurable",
+  "description": null,
+  "status": "open",
+  "priority": 4,
+  "labels": null,
+  "assignees": null,
+  "parent": null,
+  "blocked_by": [],
+  "estimate": null,
+  "due_date": null,
+  "logs": [],
+  "created_at": "2026-03-15T14:07:58.638242Z",
+  "updated_at": "2026-03-15T14:07:58.638242Z",
+  "completed_at": null,
+  "external": {}
+}
