@@ -24,9 +24,10 @@ type Schema struct {
 // Parameter describes a single input parameter from the path, query, or headers.
 type Parameter struct {
 	Name     string
-	In       string // "path", "query", "header"
+	In       string // "path", "query", "header", "form"
 	Type     reflect.Type
 	Required bool
+	Validate string
 }
 
 // BindError represents an error that occurred during request extraction or validation.
@@ -147,6 +148,7 @@ func compilePath(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 				In:       "path",
 				Type:     field.Type,
 				Required: field.Type.Kind() != reflect.Pointer,
+				Validate: field.Tag.Get("validate"),
 			})
 		}
 	}
@@ -298,6 +300,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 			In:       "query",
 			Type:     field.Type,
 			Required: field.Type.Kind() != reflect.Pointer,
+			Validate: field.Tag.Get("validate"),
 		})
 	}
 
@@ -450,6 +453,7 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 			In:       "header",
 			Type:     field.Type,
 			Required: field.Type.Kind() != reflect.Pointer,
+			Validate: field.Tag.Get("validate"),
 		})
 	}
 
@@ -501,6 +505,7 @@ func compileForm(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 			In:       "form",
 			Type:     field.Type,
 			Required: field.Type.Kind() != reflect.Pointer,
+			Validate: field.Tag.Get("validate"),
 		})
 	}
 
