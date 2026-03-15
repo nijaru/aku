@@ -116,8 +116,8 @@ func (a *App) AddSecurityScheme(name string, scheme SecurityScheme) {
 	a.securitySchemes[name] = scheme
 }
 
-// OpenAPI generates an OpenAPI 3.0 document for the application.
-func (a *App) OpenAPI(title, version string) *openapi.Document {
+// OpenAPIDocument generates an OpenAPI 3.0 document for the application.
+func (a *App) OpenAPIDocument(title, version string) *openapi.Document {
 	iroutes := make([]openapi.Route, len(a.routes))
 	for i, r := range a.routes {
 		iroutes[i] = r
@@ -139,10 +139,25 @@ func (a *App) OpenAPI(title, version string) *openapi.Document {
 	return openapi.Generate(title, version, iroutes, schemes)
 }
 
+// OpenAPI registers an endpoint that serves the OpenAPI JSON specification.
+func (a *App) OpenAPI(pattern, title, version string) {
+	a.mux.Handle("GET "+pattern, a.OpenAPIHandler(title, version))
+}
+
+// SwaggerUI registers an endpoint that serves the Swagger UI.
+func (a *App) SwaggerUI(pattern, specURL string) {
+	a.mux.Handle("GET "+pattern, a.SwaggerUIHandler(specURL))
+}
+
+// RedocUI registers an endpoint that serves the Redoc UI.
+func (a *App) RedocUI(pattern, specURL string) {
+	a.mux.Handle("GET "+pattern, a.RedocUIHandler(specURL))
+}
+
 // OpenAPIHandler returns an http.Handler that serves the OpenAPI JSON specification.
 func (a *App) OpenAPIHandler(title, version string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		doc := a.OpenAPI(title, version)
+		doc := a.OpenAPIDocument(title, version)
 		data, err := doc.JSON()
 		if err != nil {
 			http.Error(w, "Failed to generate OpenAPI spec", http.StatusInternalServerError)

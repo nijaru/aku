@@ -3,8 +3,10 @@ package bind
 import (
 	"encoding"
 	"fmt"
+	"net/url"
 	"reflect"
 	"strconv"
+	"time"
 )
 
 // Binder is the interface that can be implemented by types to customize
@@ -16,20 +18,23 @@ type Binder interface {
 var (
 	binderType          = reflect.TypeOf((*Binder)(nil)).Elem()
 	textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+	durationType        = reflect.TypeOf(time.Duration(0))
+	urlType             = reflect.TypeOf(url.URL{})
 )
 
 // coerce converts a string value into the target reflect.Value's type.
-// Supported types: string, int, int8, int16, int32, int64, bool, float32, float64, time.Time,
-// any type implementing Binder, and pointers to these types.
 func coerce(s string, v reflect.Value) error {
+	typ := v.Type()
+
 	if v.Kind() != reflect.Pointer || !v.IsNil() {
-		if v.Type().Implements(binderType) {
+		if typ.Implements(binderType) {
 			return v.Interface().(Binder).UnmarshalAku(s)
 		}
-		if v.Type().Implements(textUnmarshalerType) {
+		if typ.Implements(textUnmarshalerType) {
 			return v.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(s))
 		}
 	}
+
 	if v.CanAddr() {
 		addr := v.Addr()
 		if addr.Type().Implements(binderType) {
@@ -42,13 +47,31 @@ func coerce(s string, v reflect.Value) error {
 
 	if v.Kind() == reflect.Pointer {
 		// Create a new value of the underlying type and coerce the string into it.
-		elemTyp := v.Type().Elem()
+		elemTyp := typ.Elem()
 		newVal := reflect.New(elemTyp).Elem()
 		if err := coerce(s, newVal); err != nil {
 			return err
 		}
 		// Set the pointer to point to the newly created value.
 		v.Set(newVal.Addr())
+		return nil
+	}
+
+	// Specialized types that don't implement TextUnmarshaler or need specific handling
+	if typ == durationType {
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return fmt.Errorf("invalid duration: %w", err)
+		}
+		v.Set(reflect.ValueOf(d))
+		return nil
+	}
+	if typ == urlType {
+		u, err := url.Parse(s)
+		if err != nil {
+			return fmt.Errorf("invalid url: %w", err)
+		}
+		v.Set(reflect.ValueOf(*u))
 		return nil
 	}
 
