@@ -9,9 +9,9 @@ The project goal is simple: keep `net/http` interoperability, provide ergonomic 
 
 ## Status
 
-- The repo is currently at the initial project setup stage.
-- The next implementation milestones are a thin router wrapper and the first generic handler pipeline.
-- The README is ahead of the code on purpose so the public direction is clear, but the API is not finalized yet.
+- **MVP Core Functional**: Aku already supports typed handlers, automatic request extraction (path, query, header, body), validation hooks, and Problem Details JSON responses.
+- **Next implementation milestones**: OpenAPI 3.x document generation, complex binding (maps/nested structs), and metadata API expansion.
+- The project is in active development, moving from core stability toward feature completeness.
 
 If you need a production-ready Go API library today, use an established option. If you want a Go-native exploration of typed API ergonomics on top of `net/http`, that is what Aku is being built for.
 

@@ -17,9 +17,12 @@ type Handler[In any, Out any] func(context.Context, In) (Out, error)
 type RouteOption func(*routeMeta)
 
 type routeMeta struct {
-	status     int
-	middleware []func(http.Handler) http.Handler
-	schema     *bind.Schema
+	status      int
+	summary     string
+	description string
+	tags        []string
+	middleware  []func(http.Handler) http.Handler
+	schema      *bind.Schema
 }
 
 func defaultRouteMeta() routeMeta {
@@ -39,6 +42,27 @@ func WithStatus(code int) RouteOption {
 func WithMiddleware(mw ...func(http.Handler) http.Handler) RouteOption {
 	return func(m *routeMeta) {
 		m.middleware = append(m.middleware, mw...)
+	}
+}
+
+// WithSummary sets a summary for the route, used in OpenAPI generation.
+func WithSummary(summary string) RouteOption {
+	return func(m *routeMeta) {
+		m.summary = summary
+	}
+}
+
+// WithDescription sets a detailed description for the route, used in OpenAPI generation.
+func WithDescription(description string) RouteOption {
+	return func(m *routeMeta) {
+		m.description = description
+	}
+}
+
+// WithTags adds tags to the route, used for grouping in OpenAPI generation.
+func WithTags(tags ...string) RouteOption {
+	return func(m *routeMeta) {
+		m.tags = append(m.tags, tags...)
 	}
 }
 
@@ -120,6 +144,18 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 
 	// Register the handler with the mux.
 	app.mux.Handle(method+" "+pattern, finalHandler)
+
+	// Store route metadata for OpenAPI generation.
+	app.routes = append(app.routes, &Route{
+		Method:      method,
+		Pattern:     pattern,
+		Status:      meta.status,
+		Summary:     meta.summary,
+		Description: meta.description,
+		Tags:        meta.tags,
+		Schema:      schema,
+		OutputType:  reflect.TypeOf((*Out)(nil)).Elem(),
+	})
 
 	return nil
 }

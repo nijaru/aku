@@ -100,3 +100,48 @@ func TestRegister_Error(t *testing.T) {
 		t.Errorf("unexpected invalid_param: %+v", prob.InvalidParams[0])
 	}
 }
+func TestMiddleware(t *testing.T) {
+	app := aku.New()
+	var order []string
+
+	// Global middleware
+	app.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "global")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	// Route-specific middleware
+	routeMW := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "route")
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	aku.Get(app, "/test", func(ctx context.Context, in any) (any, error) {
+		order = append(order, "handler")
+		return map[string]string{"status": "ok"}, nil
+	}, aku.WithMiddleware(routeMW))
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rr := httptest.NewRecorder()
+
+	app.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rr.Code)
+	}
+
+	expectedOrder := []string{"global", "route", "handler"}
+	if len(order) != len(expectedOrder) {
+		t.Fatalf("expected order length %d, got %d", len(expectedOrder), len(order))
+	}
+
+	for i, v := range expectedOrder {
+		if order[i] != v {
+			t.Errorf("at index %d: expected %s, got %s", i, v, order[i])
+		}
+	}
+}
