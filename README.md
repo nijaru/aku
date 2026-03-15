@@ -18,14 +18,15 @@ Aku bridges the gap between the standard library's `net/http` and the ergonomics
 
 ## Performance
 
-Aku adds zero measurable overhead over the standard library by pre-calculating extraction logic at startup.
+Aku is faster than raw `net/http` while using significantly less memory, thanks to zero-allocation reflection at registration time and pre-compiled extraction plans.
 
-| Framework | Time/op | Allocs/op |
-|-----------|---------|-----------|
-| `net/http` (manual) | 2220 ns | 36 |
-| **Aku** (automatic) | **2225 ns** | **36** |
+| Framework | Time/op | Memory/op | Allocs/op |
+|-----------|---------|-----------|-----------|
+| `net/http` (manual) | 533.6 ns | 1,062 B | 11 |
+| **Aku** (automatic) | **507.3 ns** | **627 B** | **7** |
+| **Delta** | **-4.9%** | **-41%** | **-36%** |
 
-*Benchmarks performed on Apple M3 Max, performing path/query extraction, JSON decoding, validation, and JSON encoding.*
+*Benchmark results from `BenchmarkHandler` vs `BenchmarkStdlib` on Apple M3 Max. See `benchmark_test.go` for methodology.*
 
 ## Quick Start
 
