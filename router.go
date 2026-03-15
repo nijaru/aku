@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/nijaru/aku/internal/bind"
 	"github.com/nijaru/aku/internal/render"
 )
@@ -96,35 +97,41 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		if err := extractor(r.Context(), r, v); err != nil {
 			var bindErr *bind.BindError
 			if errors.As(err, &bindErr) {
-				prob := ValidationProblem("Request extraction or validation failed", []InvalidParam{
+				handleError(app, w, r, ValidationProblem("Request extraction or validation failed", []InvalidParam{
 					{
 						Name:   bindErr.Field,
 						In:     bindErr.Source,
 						Reason: bindErr.Err.Error(),
 					},
-				})
-				render.Problem(w, prob.Status, prob)
+				}))
 			} else {
 				var prob *Problem
 				if errors.As(err, &prob) {
-					render.Problem(w, prob.Status, prob)
+					handleError(app, w, r, prob)
 				} else {
-					render.Problem(w, http.StatusBadRequest, BadRequest(err.Error()))
+					handleError(app, w, r, BadRequest(err.Error()))
 				}
 			}
 			return
 		}
 
-		// 2. Call the user handler.
+		// 2. Run validator if present.
+		if app.validator != nil {
+			if err := app.validator.Struct(in); err != nil {
+				var vErr validator.ValidationErrors
+				if errors.As(err, &vErr) {
+					handleError(app, w, r, ValidationProblem("Input validation failed", FromValidationErrors(vErr)))
+				} else {
+					handleError(app, w, r, BadRequest(err.Error()))
+				}
+				return
+			}
+		}
+
+		// 3. Call the user handler.
 		out, err := handler(r.Context(), in)
 		if err != nil {
-			var prob *Problem
-			if errors.As(err, &prob) {
-				render.Problem(w, prob.Status, prob)
-			} else {
-				// Wrap unexpected application errors into a 500 Internal Server Error problem.
-				render.Problem(w, http.StatusInternalServerError, Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error()))
-			}
+			handleError(app, w, r, err)
 			return
 		}
 
@@ -158,4 +165,19 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 	})
 
 	return nil
+}
+
+func handleError(app *App, w http.ResponseWriter, r *http.Request, err error) {
+	if app.errorHandler != nil {
+		app.errorHandler(w, r, err)
+		return
+	}
+
+	var prob *Problem
+	if errors.As(err, &prob) {
+		render.Problem(w, prob.Status, prob)
+	} else {
+		// Default behavior for non-Problem errors
+		render.Problem(w, http.StatusInternalServerError, Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error()))
+	}
 }

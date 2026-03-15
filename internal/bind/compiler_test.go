@@ -299,3 +299,101 @@ func TestCompiler_MapFields(t *testing.T) {
 		t.Errorf("unexpected Header.Tags: %v", in.Header.Tags)
 	}
 }
+
+func TestCompiler_NestedStructs(t *testing.T) {
+	type Page struct {
+		Size   int `query:"size"`
+		Number int `query:"number"`
+	}
+	type NestedRequest struct {
+		Query struct {
+			Pagination Page `query:"page"`
+			Filter     struct {
+				Name string `query:"name"`
+			} `query:"filter"`
+		}
+	}
+
+	extractor, _ := bind.Compiler[NestedRequest]()
+
+	req := httptest.NewRequest(http.MethodGet, "/?page[size]=10&page[number]=1&filter[name]=aku", nil)
+	var in NestedRequest
+	v := reflect.ValueOf(&in).Elem()
+
+	if err := extractor(context.Background(), req, v); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if in.Query.Pagination.Size != 10 || in.Query.Pagination.Number != 1 {
+		t.Errorf("unexpected Pagination: %+v", in.Query.Pagination)
+	}
+	if in.Query.Filter.Name != "aku" {
+		t.Errorf("unexpected Filter: %+v", in.Query.Filter)
+	}
+}
+
+func TestCompiler_NestedStructsPointer(t *testing.T) {
+	type Filter struct {
+		Name string `query:"name"`
+	}
+	type NestedRequest struct {
+		Query struct {
+			Filter *Filter `query:"filter"`
+		}
+	}
+
+	extractor, _ := bind.Compiler[NestedRequest]()
+
+	// 1. Present
+	req := httptest.NewRequest(http.MethodGet, "/?filter[name]=aku", nil)
+	var in NestedRequest
+	v := reflect.ValueOf(&in).Elem()
+
+	if err := extractor(context.Background(), req, v); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if in.Query.Filter == nil || in.Query.Filter.Name != "aku" {
+		t.Errorf("unexpected Filter: %+v", in.Query.Filter)
+	}
+
+	// 2. Absent
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	in = NestedRequest{}
+	v = reflect.ValueOf(&in).Elem()
+	if err := extractor(context.Background(), req, v); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if in.Query.Filter != nil {
+		t.Errorf("expected nil Filter, got %+v", in.Query.Filter)
+	}
+}
+
+func TestCompiler_NestedHeaders(t *testing.T) {
+	type Config struct {
+		Env string `header:"X-Env"`
+		Ver string `header:"X-Ver"`
+	}
+	type NestedRequest struct {
+		Header struct {
+			Config Config `header:"X-Config"`
+		}
+	}
+
+	extractor, _ := bind.Compiler[NestedRequest]()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Config[X-Env]", "prod")
+	req.Header.Set("X-Config[X-Ver]", "v1")
+
+	var in NestedRequest
+	v := reflect.ValueOf(&in).Elem()
+
+	if err := extractor(context.Background(), req, v); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if in.Header.Config.Env != "prod" || in.Header.Config.Ver != "v1" {
+		t.Errorf("unexpected Config: %+v", in.Header.Config)
+	}
+}

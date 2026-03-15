@@ -1,22 +1,43 @@
 package bind
 
 import (
+	"encoding"
 	"fmt"
 	"reflect"
 	"strconv"
-	"time"
+)
+
+// Binder is the interface that can be implemented by types to customize
+// how they are extracted from path, query, or header parameters.
+type Binder interface {
+	UnmarshalAku(val string) error
+}
+
+var (
+	binderType          = reflect.TypeOf((*Binder)(nil)).Elem()
+	textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
 )
 
 // coerce converts a string value into the target reflect.Value's type.
-// Supported types: string, int, int8, int16, int32, int64, bool, float32, float64, time.Time, and pointers to these types.
+// Supported types: string, int, int8, int16, int32, int64, bool, float32, float64, time.Time,
+// any type implementing Binder, and pointers to these types.
 func coerce(s string, v reflect.Value) error {
-	if v.Type() == reflect.TypeOf(time.Time{}) {
-		t, err := time.Parse(time.RFC3339, s)
-		if err != nil {
-			return fmt.Errorf("invalid time format (RFC3339): %w", err)
+	if v.Kind() != reflect.Pointer || !v.IsNil() {
+		if v.Type().Implements(binderType) {
+			return v.Interface().(Binder).UnmarshalAku(s)
 		}
-		v.Set(reflect.ValueOf(t))
-		return nil
+		if v.Type().Implements(textUnmarshalerType) {
+			return v.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(s))
+		}
+	}
+	if v.CanAddr() {
+		addr := v.Addr()
+		if addr.Type().Implements(binderType) {
+			return addr.Interface().(Binder).UnmarshalAku(s)
+		}
+		if addr.Type().Implements(textUnmarshalerType) {
+			return addr.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(s))
+		}
 	}
 
 	if v.Kind() == reflect.Pointer {

@@ -1,8 +1,11 @@
 package aku
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/go-playground/validator/v10"
 )
 
 // InvalidParam represents a detailed validation or parsing failure for a single input parameter.
@@ -59,4 +62,42 @@ func Problemf(status int, title, format string, args ...any) *Problem {
 		Status: status,
 		Detail: fmt.Sprintf(format, args...),
 	}
+}
+
+// FromValidationErrors converts validator.ValidationErrors to a slice of InvalidParam.
+func FromValidationErrors(errs validator.ValidationErrors) []InvalidParam {
+	params := make([]InvalidParam, len(errs))
+	for i, err := range errs {
+		params[i] = InvalidParam{
+			Name:   err.Field(),
+			Reason: err.Tag(),
+		}
+		// Try to provide a more descriptive reason for common tags
+		switch err.Tag() {
+		case "required":
+			params[i].Reason = "is required"
+		case "email":
+			params[i].Reason = "must be a valid email address"
+		case "min":
+			params[i].Reason = fmt.Sprintf("must be at least %s", err.Param())
+		case "max":
+			params[i].Reason = fmt.Sprintf("must be at most %s", err.Param())
+		}
+	}
+	return params
+}
+
+func defaultErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	var prob *Problem
+	if errors.As(err, &prob) {
+		// Already a problem, just use its status
+	} else {
+		// Wrap unexpected application errors into a 500 Internal Server Error problem.
+		prob = Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error())
+	}
+
+	// We'll need access to the renderer here, or just use http.Error/json.NewEncoder
+	// Since this is in the main package, we can import render if we want, or just do it here.
+	// But it's better to keep rendering logic unified.
+	// I'll assume we can call something from internal/render or similar.
 }
