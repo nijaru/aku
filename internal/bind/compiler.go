@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 	"reflect"
+	"time"
 )
 
 // Extractor is a precompiled function that populates an input struct
@@ -77,6 +80,10 @@ func Compiler[T any]() (Extractor, *Schema) {
 			schema.Parameters = append(schema.Parameters, params...)
 		case "Header":
 			ex, params := compileHeader(i, field.Type)
+			steps = append(steps, ex)
+			schema.Parameters = append(schema.Parameters, params...)
+		case "Form":
+			ex, params := compileForm(i, field.Type)
 			steps = append(steps, ex)
 			schema.Parameters = append(schema.Parameters, params...)
 		case "Body":
@@ -164,46 +171,100 @@ func compileQuery(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 		return func(ctx context.Context, r *http.Request, v reflect.Value) error { return nil }, nil
 	}
 
-	var infos []fieldInfo
-	var params []Parameter
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		tag := field.Tag.Get("query")
-		if tag != "" {
-			infos = append(infos, fieldInfo{
-				idx:     i,
-				name:    tag,
-				isSlice: field.Type.Kind() == reflect.Slice,
-				isMap:   field.Type.Kind() == reflect.Map,
-			})
-			params = append(params, Parameter{
-				Name:     tag,
-				In:       "query",
-				Type:     field.Type,
-				Required: field.Type.Kind() != reflect.Pointer,
-			})
-		}
-	}
+	steps, params := compileQueryLevel(typ, "")
 
 	return func(ctx context.Context, r *http.Request, v reflect.Value) error {
 		section := v.Field(sectionIdx)
 		query := r.URL.Query()
-		for _, info := range infos {
-			f := section.Field(info.idx)
-			if info.isSlice {
-				vals := query[info.name]
+		for _, step := range steps {
+			if err := step(query, section); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, params
+}
+
+type queryStep func(url.Values, reflect.Value) error
+
+func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Parameter) {
+	var steps []queryStep
+	var params []Parameter
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		tag := field.Tag.Get("query")
+		if tag == "" {
+			continue
+		}
+
+		name := tag
+		if prefix != "" {
+			name = prefix + "[" + tag + "]"
+		}
+
+		fTyp := field.Type
+		for fTyp.Kind() == reflect.Pointer {
+			fTyp = fTyp.Elem()
+		}
+
+		// Support recursion for structs that are not Custom Binders
+		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !fTyp.Implements(binderType) && !reflect.PointerTo(fTyp).Implements(binderType) {
+			subSteps, subParams := compileQueryLevel(fTyp, name)
+			subPrefix := name + "["
+			steps = append(steps, func(q url.Values, v reflect.Value) error {
+				// Only allocate/recurse if there's actually data for this struct
+				found := false
+				for k := range q {
+					if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return nil
+				}
+
+				f := v.Field(i)
+				if f.Kind() == reflect.Pointer {
+					if f.IsNil() {
+						f.Set(reflect.New(f.Type().Elem()))
+					}
+					f = f.Elem()
+				}
+				for _, subStep := range subSteps {
+					if err := subStep(q, f); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			params = append(params, subParams...)
+			continue
+		}
+
+		// Leaf fields (or slices/maps/binders)
+		isSlice := field.Type.Kind() == reflect.Slice
+		isMap := field.Type.Kind() == reflect.Map
+		fieldIdx := i
+		fieldName := name
+
+		steps = append(steps, func(query url.Values, v reflect.Value) error {
+			f := v.Field(fieldIdx)
+			if isSlice {
+				vals := query[fieldName]
 				if len(vals) > 0 {
 					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
 					for i, val := range vals {
 						if err := coerce(val, slice.Index(i)); err != nil {
-							return &BindError{Field: info.name, Source: "query", Err: err}
+							return &BindError{Field: fieldName, Source: "query", Err: err}
 						}
 					}
 					f.Set(slice)
 				}
-			} else if info.isMap {
+			} else if isMap {
 				// Support name[key]=val pattern for maps
-				prefix := info.name + "["
+				prefix := fieldName + "["
 				m := reflect.MakeMap(f.Type())
 				found := false
 				for k, vals := range query {
@@ -212,7 +273,7 @@ func compileQuery(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 						val := vals[0] // take first for map
 						valVal := reflect.New(f.Type().Elem()).Elem()
 						if err := coerce(val, valVal); err != nil {
-							return &BindError{Field: info.name + "[" + key + "]", Source: "query", Err: err}
+							return &BindError{Field: fieldName + "[" + key + "]", Source: "query", Err: err}
 						}
 						m.SetMapIndex(reflect.ValueOf(key), valVal)
 						found = true
@@ -222,16 +283,25 @@ func compileQuery(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 					f.Set(m)
 				}
 			} else {
-				val := query.Get(info.name)
+				val := query.Get(fieldName)
 				if val != "" {
 					if err := coerce(val, f); err != nil {
-						return &BindError{Field: info.name, Source: "query", Err: err}
+						return &BindError{Field: fieldName, Source: "query", Err: err}
 					}
 				}
 			}
-		}
-		return nil
-	}, params
+			return nil
+		})
+
+		params = append(params, Parameter{
+			Name:     name,
+			In:       "query",
+			Type:     field.Type,
+			Required: field.Type.Kind() != reflect.Pointer,
+		})
+	}
+
+	return steps, params
 }
 
 // compileHeader creates an Extractor for the Header section of the request struct.
@@ -240,52 +310,105 @@ func compileHeader(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 		return func(ctx context.Context, r *http.Request, v reflect.Value) error { return nil }, nil
 	}
 
-	var infos []fieldInfo
-	var params []Parameter
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		tag := field.Tag.Get("header")
-		if tag != "" {
-			infos = append(infos, fieldInfo{
-				idx:     i,
-				name:    tag,
-				isSlice: field.Type.Kind() == reflect.Slice,
-				isMap:   field.Type.Kind() == reflect.Map,
-			})
-			params = append(params, Parameter{
-				Name:     tag,
-				In:       "header",
-				Type:     field.Type,
-				Required: field.Type.Kind() != reflect.Pointer,
-			})
-		}
-	}
+	steps, params := compileHeaderLevel(typ, "")
 
 	return func(ctx context.Context, r *http.Request, v reflect.Value) error {
 		section := v.Field(sectionIdx)
-		for _, info := range infos {
-			f := section.Field(info.idx)
-			if info.isSlice {
-				vals := r.Header[info.name]
+		for _, step := range steps {
+			if err := step(r.Header, section); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, params
+}
+
+type headerStep func(http.Header, reflect.Value) error
+
+func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parameter) {
+	var steps []headerStep
+	var params []Parameter
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		tag := field.Tag.Get("header")
+		if tag == "" {
+			continue
+		}
+
+		name := tag
+		if prefix != "" {
+			name = prefix + "[" + tag + "]"
+		}
+
+		fTyp := field.Type
+		for fTyp.Kind() == reflect.Pointer {
+			fTyp = fTyp.Elem()
+		}
+
+		// Support recursion for structs that are not Custom Binders
+		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !fTyp.Implements(binderType) && !reflect.PointerTo(fTyp).Implements(binderType) {
+			subSteps, subParams := compileHeaderLevel(fTyp, name)
+			subPrefix := name + "["
+			steps = append(steps, func(h http.Header, v reflect.Value) error {
+				// Only allocate/recurse if there's actually data for this struct
+				found := false
+				for k := range h {
+					if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return nil
+				}
+
+				f := v.Field(i)
+				if f.Kind() == reflect.Pointer {
+					if f.IsNil() {
+						f.Set(reflect.New(f.Type().Elem()))
+					}
+					f = f.Elem()
+				}
+				for _, subStep := range subSteps {
+					if err := subStep(h, f); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			params = append(params, subParams...)
+			continue
+		}
+
+		isSlice := field.Type.Kind() == reflect.Slice
+		isMap := field.Type.Kind() == reflect.Map
+		fieldIdx := i
+		fieldName := name
+
+		steps = append(steps, func(header http.Header, v reflect.Value) error {
+			f := v.Field(fieldIdx)
+			if isSlice {
+				vals := header[fieldName]
 				if len(vals) > 0 {
 					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
 					for i, val := range vals {
 						if err := coerce(val, slice.Index(i)); err != nil {
-							return &BindError{Field: info.name, Source: "header", Err: err}
+							return &BindError{Field: fieldName, Source: "header", Err: err}
 						}
 					}
 					f.Set(slice)
 				}
-			} else if info.isMap {
+			} else if isMap {
 				// For headers, we support prefix matching if the tag ends with -
 				// or name[key] style if it's a standard map name.
-				isPrefix := info.name[len(info.name)-1] == '-'
+				isPrefix := fieldName[len(fieldName)-1] == '-'
 				m := reflect.MakeMap(f.Type())
 				found := false
-				for k, vals := range r.Header {
+				for k, vals := range header {
 					if isPrefix {
-						if len(k) > len(info.name) && k[:len(info.name)] == info.name {
-							key := k[len(info.name):]
+						if len(k) > len(fieldName) && k[:len(fieldName)] == fieldName {
+							key := k[len(fieldName):]
 							val := vals[0]
 							valVal := reflect.New(f.Type().Elem()).Elem()
 							if err := coerce(val, valVal); err != nil {
@@ -295,9 +418,9 @@ func compileHeader(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 							found = true
 						}
 					} else {
-						prefix := info.name + "["
-						if len(k) > len(prefix)+1 && k[:len(prefix)] == prefix && k[len(k)-1] == ']' {
-							key := k[len(prefix) : len(k)-1]
+						mapPrefix := fieldName + "["
+						if len(k) > len(mapPrefix)+1 && k[:len(mapPrefix)] == mapPrefix && k[len(k)-1] == ']' {
+							key := k[len(mapPrefix) : len(k)-1]
 							val := vals[0]
 							valVal := reflect.New(f.Type().Elem()).Elem()
 							if err := coerce(val, valVal); err != nil {
@@ -312,16 +435,25 @@ func compileHeader(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
 					f.Set(m)
 				}
 			} else {
-				val := r.Header.Get(info.name)
+				val := header.Get(fieldName)
 				if val != "" {
 					if err := coerce(val, f); err != nil {
-						return &BindError{Field: info.name, Source: "header", Err: err}
+						return &BindError{Field: fieldName, Source: "header", Err: err}
 					}
 				}
 			}
-		}
-		return nil
-	}, params
+			return nil
+		})
+
+		params = append(params, Parameter{
+			Name:     name,
+			In:       "header",
+			Type:     field.Type,
+			Required: field.Type.Kind() != reflect.Pointer,
+		})
+	}
+
+	return steps, params
 }
 
 // compileBody creates an Extractor for the Body section of the request struct.
@@ -336,4 +468,94 @@ func compileBody(sectionIdx int, typ reflect.Type) Extractor {
 		}
 		return nil
 	}
+}
+
+// compileForm creates an Extractor for the Form section of the request struct.
+func compileForm(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
+	if typ.Kind() != reflect.Struct {
+		return func(ctx context.Context, r *http.Request, v reflect.Value) error { return nil }, nil
+	}
+
+	var infos []fieldInfo
+	var fileInfos []fieldInfo
+	var params []Parameter
+
+	fileHeaderType := reflect.TypeOf((*multipart.FileHeader)(nil))
+	fileHeaderSliceType := reflect.TypeOf([]*multipart.FileHeader(nil))
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		tag := field.Tag.Get("form")
+		if tag == "" {
+			continue
+		}
+
+		if field.Type == fileHeaderType || field.Type == fileHeaderSliceType {
+			fileInfos = append(fileInfos, fieldInfo{idx: i, name: tag, isSlice: field.Type.Kind() == reflect.Slice})
+		} else {
+			infos = append(infos, fieldInfo{idx: i, name: tag, isSlice: field.Type.Kind() == reflect.Slice})
+		}
+
+		params = append(params, Parameter{
+			Name:     tag,
+			In:       "form",
+			Type:     field.Type,
+			Required: field.Type.Kind() != reflect.Pointer,
+		})
+	}
+
+	return func(ctx context.Context, r *http.Request, v reflect.Value) error {
+		// Ensure form is parsed.
+		// Use a reasonable default max memory for now.
+		if err := r.ParseMultipartForm(32 << 20); err != nil && err != http.ErrNotMultipart {
+			return &BindError{Source: "form", Err: err}
+		}
+
+		section := v.Field(sectionIdx)
+
+		// Regular form values
+		for _, info := range infos {
+			if info.isSlice {
+				vals := r.Form[info.name]
+				if len(vals) > 0 {
+					f := section.Field(info.idx)
+					slice := reflect.MakeSlice(f.Type(), len(vals), len(vals))
+					for i, val := range vals {
+						if err := coerce(val, slice.Index(i)); err != nil {
+							return &BindError{Field: info.name, Source: "form", Err: err}
+						}
+					}
+					f.Set(slice)
+				}
+			} else {
+				val := r.FormValue(info.name)
+				if val != "" {
+					if err := coerce(val, section.Field(info.idx)); err != nil {
+						return &BindError{Field: info.name, Source: "form", Err: err}
+					}
+				}
+			}
+		}
+
+		// Multipart files
+		if r.MultipartForm != nil {
+			for _, info := range fileInfos {
+				files := r.MultipartForm.File[info.name]
+				if len(files) > 0 {
+					f := section.Field(info.idx)
+					if info.isSlice {
+						slice := reflect.MakeSlice(f.Type(), len(files), len(files))
+						for i, fh := range files {
+							slice.Index(i).Set(reflect.ValueOf(fh))
+						}
+						f.Set(slice)
+					} else {
+						f.Set(reflect.ValueOf(files[0]))
+					}
+				}
+			}
+		}
+
+		return nil
+	}, params
 }

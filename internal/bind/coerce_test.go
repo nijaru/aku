@@ -93,4 +93,35 @@ func TestCoerce(t *testing.T) {
 			t.Error("expected error for unsupported type")
 		}
 	})
+
+	t.Run("custom binder", func(t *testing.T) {
+		var v customBinder
+		rv := reflect.ValueOf(&v).Elem()
+		if err := coerce("custom-value", rv); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if v.val != "custom-value" {
+			t.Errorf("expected custom-value, got %s", v.val)
+		}
+	})
+
+	t.Run("custom binder pointer", func(t *testing.T) {
+		var v *customBinder
+		rv := reflect.ValueOf(&v).Elem()
+		if err := coerce("ptr-custom", rv); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if v == nil || v.val != "ptr-custom" {
+			t.Errorf("expected ptr-custom, got %v", v)
+		}
+	})
+}
+
+type customBinder struct {
+	val string
+}
+
+func (c *customBinder) UnmarshalAku(s string) error {
+	c.val = s
+	return nil
 }
