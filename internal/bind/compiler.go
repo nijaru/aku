@@ -14,7 +14,10 @@ type Config struct {
 
 // Extractor is a precompiled function that populates an input struct
 // from an HTTP request.
-type Extractor func(context.Context, *http.Request, reflect.Value, *Config) error
+type Extractor[T any] func(context.Context, *http.Request, *T, *Config) error
+
+// internalExtractor is used internally by the compiler to bind sections.
+type internalExtractor func(context.Context, *http.Request, reflect.Value, *Config) error
 
 // Schema describes the structure of an input type for documentation purposes.
 type Schema struct {
@@ -51,21 +54,21 @@ func (e *BindError) Unwrap() error {
 
 // Compiler inspects a generic input type once at startup and builds
 // a static Extractor and Schema that avoids per-request reflection overhead.
-func Compiler[T any]() (Extractor, *Schema) {
+func Compiler[T any]() (Extractor[T], *Schema) {
 	var t T
 	typ := reflect.TypeOf(t)
 	schema := &Schema{}
 
 	// If the input is not a struct, or is empty, we don't need to extract anything.
 	if typ == nil || typ.Kind() != reflect.Struct {
-		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
+		return func(ctx context.Context, r *http.Request, t *T, cfg *Config) error {
 			return nil
 		}, schema
 	}
 
 	// Build up a list of step functions that each handle one section
 	// (Path, Query, Header, Body) and execute them in order at runtime.
-	var steps []Extractor
+	var steps []internalExtractor
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -74,51 +77,44 @@ func Compiler[T any]() (Extractor, *Schema) {
 		switch field.Name {
 		case "Path":
 			ex, params := compilePath(i, field.Type)
-			steps = append(steps, ex)
+			steps = append(steps, internalExtractor(ex))
 			schema.Parameters = append(schema.Parameters, params...)
 		case "Query":
 			ex, params := compileQuery(i, field.Type)
-			steps = append(steps, ex)
+			steps = append(steps, internalExtractor(ex))
 			schema.Parameters = append(schema.Parameters, params...)
 		case "Header":
 			ex, params := compileHeader(i, field.Type)
-			steps = append(steps, ex)
+			steps = append(steps, internalExtractor(ex))
 			schema.Parameters = append(schema.Parameters, params...)
 		case "Form":
 			ex, params := compileForm(i, field.Type)
-			steps = append(steps, ex)
+			steps = append(steps, internalExtractor(ex))
 			schema.Parameters = append(schema.Parameters, params...)
 		case "Body":
-			steps = append(steps, compileBody(i, field.Type))
+			steps = append(steps, internalExtractor(compileBody(i, field.Type)))
 			schema.Body = field.Type
 		}
 	}
 
 	// If the type implements interface{ Validate() error }, call it after extraction.
-	var validator func(reflect.Value) error
-	if validateMethod, ok := reflect.PointerTo(typ).MethodByName("Validate"); ok {
-		if validateMethod.Type.NumIn() == 1 && validateMethod.Type.NumOut() == 1 && validateMethod.Type.Out(0).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
-			validator = func(v reflect.Value) error {
-				out := validateMethod.Func.Call([]reflect.Value{v.Addr()})
-				if !out[0].IsNil() {
-					return out[0].Interface().(error)
-				}
-				return nil
-			}
+	var validator func(*T) error
+	if _, ok := any((*T)(nil)).(interface{ Validate() error }); ok {
+		validator = func(t *T) error {
+			return any(t).(interface{ Validate() error }).Validate()
 		}
 	}
 
 	// The returned Extractor simply runs all the compiled steps.
-	return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
+	return func(ctx context.Context, r *http.Request, t *T, cfg *Config) error {
+		v := reflect.ValueOf(t).Elem()
 		for _, step := range steps {
 			if err := step(ctx, r, v, cfg); err != nil {
 				return err
 			}
 		}
 		if validator != nil {
-			if err := validator(v); err != nil {
-				return err
-			}
+			return validator(t)
 		}
 		return nil
 	}, schema

@@ -39,6 +39,7 @@ type App struct {
 	errorHandler       ErrorHandler
 	securitySchemes    map[string]SecurityScheme
 	MaxMultipartMemory int64
+	bindConfig         *bind.Config
 }
 
 // Route represents a registered route and its metadata.
@@ -75,6 +76,10 @@ func New(opts ...Option) *App {
 
 	for _, opt := range opts {
 		opt(a)
+	}
+
+	a.bindConfig = &bind.Config{
+		MaxMultipartMemory: a.MaxMultipartMemory,
 	}
 
 	return a

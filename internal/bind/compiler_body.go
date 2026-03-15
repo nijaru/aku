@@ -7,8 +7,8 @@ import (
 	"reflect"
 )
 
-// compileBody creates an Extractor for the Body section of the request struct.
-func compileBody(sectionIdx int, typ reflect.Type) Extractor {
+// compileBody creates an internalExtractor for the Body section of the request struct.
+func compileBody(sectionIdx int, typ reflect.Type) internalExtractor {
 	return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
 		if r.Body == nil || r.ContentLength == 0 {
 			return nil

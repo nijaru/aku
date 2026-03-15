@@ -8,21 +8,17 @@ import (
 )
 
 // JSON renders a success payload as JSON with the specified status code.
-func JSON(w http.ResponseWriter, status int, v any) {
+func JSON[T any](w http.ResponseWriter, status int, v T) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if v != nil {
-		_ = json.NewEncoder(w).Encode(v)
-	}
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // Problem renders an RFC 9457 Problem Details for HTTP APIs.
-func Problem(w http.ResponseWriter, status int, v any) {
+func Problem[T any](w http.ResponseWriter, status int, v T) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	if v != nil {
-		_ = json.NewEncoder(w).Encode(v)
-	}
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // Reader writes the reader content to the response with the given status and content type.

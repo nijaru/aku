@@ -6,8 +6,8 @@ import (
 	"reflect"
 )
 
-// compilePath creates an Extractor for the Path section of the request struct.
-func compilePath(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
+// compilePath creates an internalExtractor for the Path section of the request struct.
+func compilePath(sectionIdx int, typ reflect.Type) (internalExtractor, []Parameter) {
 	if typ.Kind() != reflect.Struct {
 		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error { return nil }, nil
 	}

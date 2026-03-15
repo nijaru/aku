@@ -7,8 +7,8 @@ import (
 	"reflect"
 )
 
-// compileForm creates an Extractor for the Form section of the request struct.
-func compileForm(sectionIdx int, typ reflect.Type) (Extractor, []Parameter) {
+// compileForm creates an internalExtractor for the Form section of the request struct.
+func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Parameter) {
 	if typ.Kind() != reflect.Struct {
 		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error { return nil }, nil
 	}
