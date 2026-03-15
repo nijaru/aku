@@ -40,6 +40,7 @@ type Route struct {
 	Tags        []string
 	Schema      *bind.Schema
 	OutputType  reflect.Type
+	middleware  []func(http.Handler) http.Handler
 }
 
 func (r *Route) GetMethod() string              { return r.Method }

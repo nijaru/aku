@@ -23,9 +23,10 @@ func TestOpenAPI_Recursion(t *testing.T) {
 	doc := app.OpenAPI("Recursion API", "1.0.0")
 
 	// Check components
-	nodeSchema, ok := doc.Components.Schemas["Node"]
+	key := "github.com.nijaru.aku_test.Node"
+	nodeSchema, ok := doc.Components.Schemas[key]
 	if !ok {
-		t.Fatal("expected Node schema in components")
+		t.Fatalf("expected Node schema in components at key %q", key)
 	}
 
 	if nodeSchema.Type != "object" {
@@ -37,7 +38,7 @@ func TestOpenAPI_Recursion(t *testing.T) {
 		t.Fatal("expected 'next' field in Node schema")
 	}
 
-	if nextField.Ref != "#/components/schemas/Node" {
-		t.Errorf("expected recursive ref #/components/schemas/Node, got %q", nextField.Ref)
+	if nextField.Ref != "#/components/schemas/"+key {
+		t.Errorf("expected recursive ref #/components/schemas/%s, got %q", key, nextField.Ref)
 	}
 }
