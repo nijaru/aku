@@ -1,6 +1,8 @@
 package bind
 
 import (
+	"net"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -83,6 +85,39 @@ func TestCoerce(t *testing.T) {
 		expected, _ := time.Parse(time.RFC3339, s)
 		if !v.Equal(expected) {
 			t.Errorf("expected %v, got %v", expected, v)
+		}
+	})
+
+	t.Run("time.Duration", func(t *testing.T) {
+		var v time.Duration
+		rv := reflect.ValueOf(&v).Elem()
+		if err := coerce("5m30s", rv); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if v != 5*time.Minute+30*time.Second {
+			t.Errorf("expected 5m30s, got %v", v)
+		}
+	})
+
+	t.Run("url.URL", func(t *testing.T) {
+		var v url.URL
+		rv := reflect.ValueOf(&v).Elem()
+		if err := coerce("https://example.com/foo?bar=baz", rv); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if v.String() != "https://example.com/foo?bar=baz" {
+			t.Errorf("expected https://example.com/foo?bar=baz, got %s", v.String())
+		}
+	})
+
+	t.Run("net.IP", func(t *testing.T) {
+		var v net.IP
+		rv := reflect.ValueOf(&v).Elem()
+		if err := coerce("192.168.1.1", rv); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if v.String() != "192.168.1.1" {
+			t.Errorf("expected 192.168.1.1, got %s", v.String())
 		}
 	})
 

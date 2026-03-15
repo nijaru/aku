@@ -69,11 +69,25 @@ func WithTags(tags ...string) RouteOption {
 	}
 }
 
+// WithTag adds a single tag to the route.
+func WithTag(tag string) RouteOption {
+	return func(m *routeMeta) {
+		m.tags = append(m.tags, tag)
+	}
+}
+
 // WithSecurity adds security requirements to the route.
 // Example: WithSecurity(map[string][]string{"BearerAuth": {}})
 func WithSecurity(security ...map[string][]string) RouteOption {
 	return func(m *routeMeta) {
 		m.security = append(m.security, security...)
+	}
+}
+
+// WithSecurityName adds a simple security requirement by name with no scopes.
+func WithSecurityName(name string) RouteOption {
+	return func(m *routeMeta) {
+		m.security = append(m.security, map[string][]string{name: {}})
 	}
 }
 
