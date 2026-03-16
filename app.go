@@ -1,8 +1,15 @@
 package aku
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
 	"reflect"
+	"strings"
+	"syscall"
+	"time"
 
 	"github.com/nijaru/aku/internal/bind"
 	"github.com/nijaru/aku/internal/openapi"
@@ -39,6 +46,7 @@ type App struct {
 	errorHandler       ErrorHandler
 	securitySchemes    map[string]SecurityScheme
 	MaxMultipartMemory int64
+	ShutdownTimeout    time.Duration
 	bindConfig         *bind.Config
 }
 
@@ -72,6 +80,7 @@ func New(opts ...Option) *App {
 		mux:                http.NewServeMux(),
 		securitySchemes:    make(map[string]SecurityScheme),
 		MaxMultipartMemory: 32 << 20, // 32MB default
+		ShutdownTimeout:    30 * time.Second,
 	}
 
 	for _, opt := range opts {
@@ -90,6 +99,44 @@ func (a *App) Use(mw ...func(http.Handler) http.Handler) {
 	a.middleware = append(a.middleware, mw...)
 }
 
+// Group creates a new route group with the given prefix and middleware.
+func (a *App) Group(prefix string, mw ...func(http.Handler) http.Handler) *Group {
+	return &Group{
+		app:        a,
+		prefix:     prefix,
+		middleware: mw,
+	}
+}
+
+// Handle implements the Router interface.
+func (a *App) Handle(method, pattern string, handler http.Handler, route *Route) {
+	a.mux.Handle(method+" "+pattern, handler)
+	a.routes = append(a.routes, route)
+}
+
+func (a *App) App() *App                            { return a }
+func (a *App) Prefix() string                       { return "" }
+func (a *App) Middleware() []func(http.Handler) http.Handler { return nil }
+
+func (a *App) Static(prefix, root string) {
+	a.StaticFS(prefix, http.Dir(root))
+}
+
+func (a *App) StaticFS(prefix string, fs http.FileSystem) {
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	handler := http.StripPrefix(strings.TrimSuffix(prefix, "/"), http.FileServer(fs))
+	a.mux.Handle(prefix, handler)
+}
+
+// WithGlobalMiddleware adds global middleware to the application.
+func WithGlobalMiddleware(mw ...func(http.Handler) http.Handler) Option {
+	return func(a *App) {
+		a.middleware = append(a.middleware, mw...)
+	}
+}
+
 // WithValidator sets a custom validator for the application.
 func WithValidator(v Validator) Option {
 	return func(a *App) {
@@ -101,6 +148,13 @@ func WithValidator(v Validator) Option {
 func WithErrorHandler(h ErrorHandler) Option {
 	return func(a *App) {
 		a.errorHandler = h
+	}
+}
+
+// WithShutdownTimeout sets the timeout for graceful shutdown.
+func WithShutdownTimeout(d time.Duration) Option {
+	return func(a *App) {
+		a.ShutdownTimeout = d
 	}
 }
 
@@ -244,9 +298,92 @@ func (a *App) RedocUIHandler(specURL string) http.Handler {
 // ServeHTTP implements the standard library http.Handler interface.
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	iw := &errorInterceptor{ResponseWriter: w}
 	var finalHandler http.Handler = a.mux
+
 	for i := len(a.middleware) - 1; i >= 0; i-- {
 		finalHandler = a.middleware[i](finalHandler)
 	}
-	finalHandler.ServeHTTP(w, r)
+
+	finalHandler.ServeHTTP(iw, r)
+
+	if !iw.written && (iw.status == http.StatusNotFound || iw.status == http.StatusMethodNotAllowed) {
+		// If mux wrote a standard error, replace it with a Problem
+		var prob *Problem
+		if iw.status == http.StatusNotFound {
+			prob = NotFound("The requested resource was not found")
+		} else {
+			prob = Problemf(http.StatusMethodNotAllowed, "Method Not Allowed", "The %s method is not allowed for this resource", r.Method)
+		}
+		handleError(a, w, r, prob)
+	}
+}
+
+type errorInterceptor struct {
+	http.ResponseWriter
+	status  int
+	written bool
+}
+
+func (i *errorInterceptor) WriteHeader(status int) {
+	i.status = status
+	if status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+		i.written = true
+		i.ResponseWriter.WriteHeader(status)
+	}
+}
+
+func (i *errorInterceptor) Write(b []byte) (int, error) {
+	if i.status == http.StatusNotFound || i.status == http.StatusMethodNotAllowed {
+		// Suppress the standard library's plain text response
+		return len(b), nil
+	}
+	i.written = true
+	return i.ResponseWriter.Write(b)
+}
+
+func (i *errorInterceptor) Unwrap() http.ResponseWriter {
+	return i.ResponseWriter
+}
+
+func (i *errorInterceptor) Flush() {
+	if f, ok := i.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Run starts the HTTP server on the given address with graceful shutdown support.
+// It listens for SIGINT and SIGTERM signals and waits for active requests to finish
+// up to the configured ShutdownTimeout.
+func (a *App) Run(addr string) error {
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: a,
+	}
+
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
+		<-sigint
+
+		slog.Info("Shutting down server...")
+
+		ctx, cancel := context.WithTimeout(context.Background(), a.ShutdownTimeout)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			slog.Error("HTTP server Shutdown", slog.Any("error", err))
+		}
+		close(idleConnsClosed)
+	}()
+
+	slog.Info("Serving on " + addr)
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		return err
+	}
+
+	<-idleConnsClosed
+	slog.Info("Server stopped")
+	return nil
 }
