@@ -55,6 +55,36 @@ func ValidationProblem(detail string, params []InvalidParam) *Problem {
 	}
 }
 
+// NotFound creates a generic 404 Not Found problem.
+func NotFound(detail string) *Problem {
+	return &Problem{
+		Type:   "about:blank",
+		Title:  "Not Found",
+		Status: http.StatusNotFound,
+		Detail: detail,
+	}
+}
+
+// Forbidden creates a generic 403 Forbidden problem.
+func Forbidden(detail string) *Problem {
+	return &Problem{
+		Type:   "about:blank",
+		Title:  "Forbidden",
+		Status: http.StatusForbidden,
+		Detail: detail,
+	}
+}
+
+// TooManyRequests creates a generic 429 Too Many Requests problem.
+func TooManyRequests(detail string) *Problem {
+	return &Problem{
+		Type:   "about:blank",
+		Title:  "Too Many Requests",
+		Status: http.StatusTooManyRequests,
+		Detail: detail,
+	}
+}
+
 // Problemf creates a custom problem with a formatted detail string.
 func Problemf(status int, title, format string, args ...any) *Problem {
 	return &Problem{
