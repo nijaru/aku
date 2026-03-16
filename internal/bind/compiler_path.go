@@ -34,6 +34,7 @@ func compilePath(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 				Type:     field.Type,
 				Required: field.Type.Kind() != reflect.Pointer,
 				Validate: field.Tag.Get("validate"),
+				Example:  field.Tag.Get("example"),
 			})
 		}
 	}
