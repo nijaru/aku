@@ -16,6 +16,16 @@ import (
 // Handler is the canonical typed handler signature.
 type Handler[In any, Out any] func(context.Context, In) (Out, error)
 
+// Router is the interface implemented by App and Group for route registration.
+type Router interface {
+	Handle(method, pattern string, handler http.Handler, route *Route)
+	App() *App
+	Prefix() string
+	Middleware() []func(http.Handler) http.Handler
+	Static(prefix, root string)
+	StaticFS(prefix string, fs http.FileSystem)
+}
+
 // RouteOption configures a specific route at registration time.
 type RouteOption func(*routeMeta)
 
@@ -92,18 +102,71 @@ func WithSecurityName(name string) RouteOption {
 	}
 }
 
-// Get registers a new GET route on the application.
-func Get[In any, Out any](app *App, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
-	return register(app, http.MethodGet, pattern, handler, opts...)
+// Group represents a group of routes with a common prefix and middleware.
+type Group struct {
+	app        *App
+	prefix     string
+	middleware []func(http.Handler) http.Handler
 }
 
-// Post registers a new POST route on the application.
-func Post[In any, Out any](app *App, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
-	return register(app, http.MethodPost, pattern, handler, opts...)
+// Group creates a new sub-group from this group.
+func (g *Group) Group(prefix string, mw ...func(http.Handler) http.Handler) *Group {
+	return &Group{
+		app:        g.app,
+		prefix:     g.prefix + prefix,
+		middleware: append(append([]func(http.Handler) http.Handler{}, g.middleware...), mw...),
+	}
 }
 
-// register registers a new route with the application.
-func register[In any, Out any](app *App, method, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+func (g *Group) Handle(method, pattern string, handler http.Handler, route *Route) {
+	g.app.Handle(method, g.prefix+pattern, handler, route)
+}
+
+func (g *Group) App() *App                            { return g.app }
+func (g *Group) Prefix() string                       { return g.prefix }
+func (g *Group) Middleware() []func(http.Handler) http.Handler { return g.middleware }
+
+func (g *Group) Static(prefix, root string) {
+	g.app.Static(g.prefix+prefix, root)
+}
+
+func (g *Group) StaticFS(prefix string, fs http.FileSystem) {
+	g.app.StaticFS(g.prefix+prefix, fs)
+}
+
+// Get registers a new GET route on the router.
+func Get[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+	return register(r, http.MethodGet, pattern, handler, opts...)
+}
+
+// Post registers a new POST route on the router.
+func Post[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+	return register(r, http.MethodPost, pattern, handler, opts...)
+}
+
+// Put registers a new PUT route on the router.
+func Put[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+	return register(r, http.MethodPut, pattern, handler, opts...)
+}
+
+// Patch registers a new PATCH route on the router.
+func Patch[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+	return register(r, http.MethodPatch, pattern, handler, opts...)
+}
+
+// Delete registers a new DELETE route on the router.
+func Delete[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+	return register(r, http.MethodDelete, pattern, handler, opts...)
+}
+
+// Options registers a new OPTIONS route on the router.
+func Options[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+	return register(r, http.MethodOptions, pattern, handler, opts...)
+}
+
+// register registers a new route with the router.
+func register[In any, Out any](r Router, method, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+	app := r.App()
 	meta := defaultRouteMeta()
 
 	// Compile the extractor and schema once at startup.
@@ -224,19 +287,22 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		render.JSON(w, meta.status, out)
 	})
 
-	// Apply route-local middleware.
+	// Apply route-local middleware, then group middleware.
 	var finalHandler http.Handler = h
+	// Route-local first (innermost)
 	for i := len(meta.middleware) - 1; i >= 0; i-- {
 		finalHandler = meta.middleware[i](finalHandler)
 	}
+	// Group middleware (outer)
+	groupMW := r.Middleware()
+	for i := len(groupMW) - 1; i >= 0; i-- {
+		finalHandler = groupMW[i](finalHandler)
+	}
 
-	// Register the handler with the mux.
-	app.mux.Handle(method+" "+pattern, finalHandler)
-
-	// Store route metadata for OpenAPI generation.
-	app.routes = append(app.routes, &Route{
+	fullPattern := r.Prefix() + pattern
+	route := &Route{
 		Method:      method,
-		Pattern:     pattern,
+		Pattern:     fullPattern,
 		Status:      meta.status,
 		Summary:     meta.summary,
 		Description: meta.description,
@@ -244,8 +310,11 @@ func register[In any, Out any](app *App, method, pattern string, handler Handler
 		Security:    meta.security,
 		Schema:      schema,
 		OutputType:  outType,
-		middleware:  meta.middleware,
-	})
+		middleware:  append(append([]func(http.Handler) http.Handler{}, groupMW...), meta.middleware...),
+	}
+
+	// Register with the router.
+	r.Handle(method, pattern, finalHandler, route)
 
 	return nil
 }
