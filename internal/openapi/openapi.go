@@ -86,6 +86,7 @@ type Schema struct {
 	MaxLength            *int              `json:"maxLength,omitempty"`
 	Pattern              string            `json:"pattern,omitempty"`
 	Enum                 []any             `json:"enum,omitempty"`
+	Example              any               `json:"example,omitempty"`
 }
 
 // JSON returns the JSON representation of the document.
@@ -147,6 +148,9 @@ func Generate(title, version string, routes []Route, securitySchemes map[string]
 			}
 			ps := g.reflectToSchema(p.Type)
 			g.applyValidation(&ps, p.Validate)
+			if p.Example != "" {
+				ps.Example = p.Example
+			}
 			required := p.Required
 			if p.In == "path" {
 				required = true
@@ -399,6 +403,9 @@ func (g *generator) buildStructSchema(t reflect.Type) Schema {
 
 		propSchema := g.reflectToSchema(f.Type)
 		g.applyValidation(&propSchema, f.Tag.Get("validate"))
+		if ex := f.Tag.Get("example"); ex != "" {
+			propSchema.Example = ex
+		}
 		s.Properties[name] = propSchema
 	}
 	return s
