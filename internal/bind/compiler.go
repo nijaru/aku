@@ -32,6 +32,7 @@ type Parameter struct {
 	Type     reflect.Type
 	Required bool
 	Validate string
+	Example  string
 }
 
 // BindError represents an error that occurred during request extraction or validation.
