@@ -95,6 +95,10 @@ func Compiler[T any]() (Extractor[T], *Schema) {
 		case "Body":
 			steps = append(steps, internalExtractor(compileBody(i, field.Type)))
 			schema.Body = field.Type
+		case "Ctx":
+			ex, params := compileCtx(i, field.Type)
+			steps = append(steps, internalExtractor(ex))
+			schema.Parameters = append(schema.Parameters, params...)
 		}
 	}
 
