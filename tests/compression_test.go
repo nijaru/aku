@@ -10,6 +10,7 @@ import (
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
 	"github.com/nijaru/aku"
 	"github.com/nijaru/aku/middleware"
 )
@@ -23,7 +24,7 @@ func TestCompressionMiddleware(t *testing.T) {
 	}
 
 	h := func(ctx context.Context, in In) (Out, error) {
-		return Out{Message: strings.Repeat("a", 1000)}, nil
+		return Out{Message: strings.Repeat("a", 2000)}, nil
 	}
 
 	aku.Get(app, "/test", h)
@@ -45,11 +46,39 @@ func TestCompressionMiddleware(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		expected := `{"message":"` + strings.Repeat("a", 1000) + `"}
+		expected := `{"message":"` + strings.Repeat("a", 2000) + `"}
 `
 		if string(data) != expected {
 			t.Errorf("expected len %d, got len %d", len(expected), len(data))
-			t.Errorf("expected %s, got %s", expected, string(data))
+		}
+	})
+
+	t.Run("Zstd", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Accept-Encoding", "zstd")
+		rec := httptest.NewRecorder()
+
+		app.ServeHTTP(rec, req)
+
+		if rec.Header().Get("Content-Encoding") != "zstd" {
+			t.Errorf("expected Content-Encoding zstd, got %s", rec.Header().Get("Content-Encoding"))
+		}
+
+		zr, err := zstd.NewReader(rec.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer zr.Close()
+
+		data, err := io.ReadAll(zr)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		expected := `{"message":"` + strings.Repeat("a", 2000) + `"}
+`
+		if string(data) != expected {
+			t.Errorf("expected len %d, got len %d", len(expected), len(data))
 		}
 	})
 
@@ -75,11 +104,10 @@ func TestCompressionMiddleware(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		expected := `{"message":"` + strings.Repeat("a", 1000) + `"}
+		expected := `{"message":"` + strings.Repeat("a", 2000) + `"}
 `
 		if string(data) != expected {
 			t.Errorf("expected len %d, got len %d", len(expected), len(data))
-			t.Errorf("expected %s, got %s", expected, string(data))
 		}
 	})
 
@@ -93,11 +121,10 @@ func TestCompressionMiddleware(t *testing.T) {
 			t.Errorf("expected no Content-Encoding, got %s", rec.Header().Get("Content-Encoding"))
 		}
 
-		expected := `{"message":"` + strings.Repeat("a", 1000) + `"}
+		expected := `{"message":"` + strings.Repeat("a", 2000) + `"}
 `
 		if rec.Body.String() != expected {
 			t.Errorf("expected len %d, got len %d", len(expected), rec.Body.Len())
-			t.Errorf("expected %s, got %s", expected, rec.Body.String())
 		}
 	})
 
