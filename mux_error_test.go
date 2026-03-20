@@ -65,3 +65,27 @@ func TestApp_MuxErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestApp_Custom404(t *testing.T) {
+	app := aku.New()
+	aku.Get(app, "/custom-404", func(ctx context.Context, in struct{}) (string, error) {
+		return "", aku.Problemf(http.StatusNotFound, "Custom 404", "This is a custom 404")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/custom-404", nil)
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+
+	var prob aku.Problem
+	if err := json.NewDecoder(w.Body).Decode(&prob); err != nil {
+		t.Fatal(err)
+	}
+
+	if prob.Title != "Custom 404" {
+		t.Errorf("Expected custom problem title, got %q", prob.Title)
+	}
+}

@@ -56,6 +56,20 @@ func TestRouter_Static(t *testing.T) {
 			t.Errorf("Expected problem+json, got %q", w.Header().Get("Content-Type"))
 		}
 	})
+
+	t.Run("Redirects exact prefix", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/static", nil)
+		w := httptest.NewRecorder()
+
+		app.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMovedPermanently {
+			t.Errorf("Expected status 301, got %d", w.Code)
+		}
+		if w.Header().Get("Location") != "/static/" {
+			t.Errorf("Expected location /static/, got %q", w.Header().Get("Location"))
+		}
+	})
 }
 
 func TestGroup_Static(t *testing.T) {

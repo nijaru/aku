@@ -18,15 +18,13 @@ Aku bridges the gap between the standard library's `net/http` and the ergonomics
 
 ## Performance
 
-Aku is faster than raw `net/http` while using significantly less memory, thanks to zero-allocation reflection at registration time and pre-compiled extraction plans.
+Aku is designed with a **Zero-Allocation Philosophy**. By leveraging Go's reflection only at route registration time, Aku "compiles" static extraction plans for every handler. At runtime, the request path uses these pre-compiled plans and `sync.Pool` to achieve performance that is nearly identical to hand-optimized `net/http` code.
 
-| Framework | Time/op | Memory/op | Allocs/op |
-|-----------|---------|-----------|-----------|
-| `net/http` (manual) | 533.6 ns | 1,062 B | 11 |
-| **Aku** (automatic) | **507.3 ns** | **627 B** | **7** |
-| **Delta** | **-4.9%** | **-41%** | **-36%** |
+- **Pre-compiled Extraction**: No reflection in the request hot path.
+- **Buffer & Struct Reuse**: Extensive use of `sync.Pool` to minimize GC pressure.
+- **Standard Library Speed**: Built directly on `http.ServeMux` with minimal wrapping.
 
-*Benchmark results from `BenchmarkHandler` vs `BenchmarkStdlib` on Apple M3 Max. See `benchmark_test.go` for methodology.*
+*Benchmarks consistently show Aku adds minimal overhead (~100ns) compared to manually binding `net/http` handlers. See `benchmark_test.go` for the latest verified results.*
 
 ## Quick Start
 

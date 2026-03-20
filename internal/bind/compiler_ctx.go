@@ -6,6 +6,10 @@ import (
 	"reflect"
 )
 
+// ContextKey is a custom type used for context value lookups to avoid collisions
+// with built-in string types, satisfying standard go linters (e.g., SA1029).
+type ContextKey string
+
 func compileCtx(sectionIdx int, typ reflect.Type) (func(context.Context, *http.Request, reflect.Value, *Config) error, []Parameter) {
 	if typ.Kind() != reflect.Struct {
 		return nil, nil
@@ -38,9 +42,14 @@ func compileCtx(sectionIdx int, typ reflect.Type) (func(context.Context, *http.R
 				return nil
 			}
 
-			val := ctx.Value(tag)
+			// Look up using the custom ContextKey type
+			val := ctx.Value(ContextKey(tag))
 			if val == nil {
-				return nil
+				// Fallback to string key for backwards compatibility
+				val = ctx.Value(tag)
+				if val == nil {
+					return nil
+				}
 			}
 
 			fieldVal := sectionVal.Elem().Field(idx)

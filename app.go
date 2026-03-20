@@ -123,8 +123,13 @@ func (a *App) Static(prefix, root string) {
 }
 
 func (a *App) StaticFS(prefix string, fs http.FileSystem) {
+	// Go 1.22 mux routing requires matching exact paths or directories with trailing slashes.
 	if !strings.HasSuffix(prefix, "/") {
+		// Register the exact prefix to redirect to the trailing slash version,
+		// or serve the index if it exists.
+		exactPrefix := prefix
 		prefix += "/"
+		a.mux.Handle(exactPrefix, http.RedirectHandler(prefix, http.StatusMovedPermanently))
 	}
 	handler := http.StripPrefix(strings.TrimSuffix(prefix, "/"), http.FileServer(fs))
 	a.mux.Handle(prefix, handler)
@@ -307,7 +312,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	finalHandler.ServeHTTP(iw, r)
 
-	if !iw.written && (iw.status == http.StatusNotFound || iw.status == http.StatusMethodNotAllowed) {
+	if iw.intercepted {
 		// If mux wrote a standard error, replace it with a Problem
 		var prob *Problem
 		if iw.status == http.StatusNotFound {
@@ -316,16 +321,23 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			prob = Problemf(http.StatusMethodNotAllowed, "Method Not Allowed", "The %s method is not allowed for this resource", r.Method)
 		}
 		handleError(a, w, r, prob)
+	} else if !iw.written && (iw.status == http.StatusNotFound || iw.status == http.StatusMethodNotAllowed) {
+		// A handler called WriteHeader(404) but no Write(), we must write the header.
+		w.WriteHeader(iw.status)
 	}
 }
 
 type errorInterceptor struct {
 	http.ResponseWriter
-	status  int
-	written bool
+	status      int
+	written     bool
+	intercepted bool
 }
 
 func (i *errorInterceptor) WriteHeader(status int) {
+	if i.written {
+		return
+	}
 	i.status = status
 	if status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
 		i.written = true
@@ -334,11 +346,23 @@ func (i *errorInterceptor) WriteHeader(status int) {
 }
 
 func (i *errorInterceptor) Write(b []byte) (int, error) {
-	if i.status == http.StatusNotFound || i.status == http.StatusMethodNotAllowed {
-		// Suppress the standard library's plain text response
+	if !i.written {
+		i.written = true
+		if (i.status == http.StatusNotFound && string(b) == "404 page not found\n") ||
+			(i.status == http.StatusMethodNotAllowed && string(b) == "Method Not Allowed\n") {
+			i.intercepted = true
+			return len(b), nil
+		}
+		// Write the delayed header
+		if i.status == http.StatusNotFound || i.status == http.StatusMethodNotAllowed {
+			i.ResponseWriter.WriteHeader(i.status)
+		}
+	}
+
+	if i.intercepted {
 		return len(b), nil
 	}
-	i.written = true
+
 	return i.ResponseWriter.Write(b)
 }
 
@@ -362,12 +386,19 @@ func (a *App) Run(addr string) error {
 	}
 
 	idleConnsClosed := make(chan struct{})
+	serverError := make(chan error, 1)
+
 	go func() {
 		sigint := make(chan os.Signal, 1)
 		signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
-		<-sigint
 
-		slog.Info("Shutting down server...")
+		select {
+		case <-sigint:
+			slog.Info("Shutting down server...")
+		case <-serverError:
+			// Server failed to start or stopped unexpectedly, skip shutdown gracefully
+			return
+		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), a.ShutdownTimeout)
 		defer cancel()
@@ -379,11 +410,17 @@ func (a *App) Run(addr string) error {
 	}()
 
 	slog.Info("Serving on " + addr)
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+	err := srv.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
+		serverError <- err
 		return err
 	}
 
-	<-idleConnsClosed
-	slog.Info("Server stopped")
+	// Only wait for shutdown if the server closed intentionally
+	if err == http.ErrServerClosed {
+		<-idleConnsClosed
+		slog.Info("Server stopped")
+	}
+
 	return nil
 }

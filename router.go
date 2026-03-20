@@ -183,25 +183,36 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 	isStream := outType == reflect.TypeOf(Stream{})
 	isSSE := outType == reflect.TypeOf(SSE{})
 
+	// Type to cache the reflect.Value and pointer together.
+	type PooledIn struct {
+		ptr *In
+		val reflect.Value
+	}
+
 	// Pool for input structs to minimize allocations.
 	pool := sync.Pool{
 		New: func() any {
-			return new(In)
+			ptr := new(In)
+			return &PooledIn{
+				ptr: ptr,
+				val: reflect.ValueOf(ptr).Elem(),
+			}
 		},
 	}
 
 	// Define the wrapper handler.
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		in := pool.Get().(*In)
+		pooled := pool.Get().(*PooledIn)
+		in := pooled.ptr
 		defer func() {
 			// Zero out the struct before putting it back.
 			var zero In
 			*in = zero
-			pool.Put(in)
+			pool.Put(pooled)
 		}()
 
 		// 1. Extract and bind parameters.
-		if err := extractor(r.Context(), r, in, app.bindConfig); err != nil {
+		if err := extractor(r.Context(), r, in, pooled.val, app.bindConfig); err != nil {
 			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
 				handleError(app, w, r, ValidationProblem("Request extraction or validation failed", []InvalidParam{
 					{

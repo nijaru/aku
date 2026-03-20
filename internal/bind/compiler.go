@@ -14,7 +14,7 @@ type Config struct {
 
 // Extractor is a precompiled function that populates an input struct
 // from an HTTP request.
-type Extractor[T any] func(context.Context, *http.Request, *T, *Config) error
+type Extractor[T any] func(context.Context, *http.Request, *T, reflect.Value, *Config) error
 
 // internalExtractor is used internally by the compiler to bind sections.
 type internalExtractor func(context.Context, *http.Request, reflect.Value, *Config) error
@@ -62,7 +62,7 @@ func Compiler[T any]() (Extractor[T], *Schema) {
 
 	// If the input is not a struct, or is empty, we don't need to extract anything.
 	if typ == nil || typ.Kind() != reflect.Struct {
-		return func(ctx context.Context, r *http.Request, t *T, cfg *Config) error {
+		return func(ctx context.Context, r *http.Request, t *T, v reflect.Value, cfg *Config) error {
 			return nil
 		}, schema
 	}
@@ -111,8 +111,7 @@ func Compiler[T any]() (Extractor[T], *Schema) {
 	}
 
 	// The returned Extractor simply runs all the compiled steps.
-	return func(ctx context.Context, r *http.Request, t *T, cfg *Config) error {
-		v := reflect.ValueOf(t).Elem()
+	return func(ctx context.Context, r *http.Request, t *T, v reflect.Value, cfg *Config) error {
 		for _, step := range steps {
 			if err := step(ctx, r, v, cfg); err != nil {
 				return err

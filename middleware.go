@@ -110,9 +110,12 @@ func Limit(rps float64, burst int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !limiter.Allow() {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte(`{"type":"about:blank","title":"Too Many Requests","status":429,"detail":"Rate limit exceeded"}`))
+				prob := TooManyRequests("Rate limit exceeded")
+				w.Header().Set("Content-Type", "application/problem+json")
+				w.WriteHeader(prob.Status)
+				// Small hack to marshal JSON since we don't have access to render here easily
+				// Alternatively, we could just copy the JSON render logic for this single case
+				w.Write([]byte(`{"type":"` + prob.Type + `","title":"` + prob.Title + `","status":` + strconv.Itoa(prob.Status) + `,"detail":"` + prob.Detail + `"}`))
 				return
 			}
 			next.ServeHTTP(w, r)
