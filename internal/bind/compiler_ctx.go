@@ -2,8 +2,10 @@ package bind
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 // ContextKey is a custom type used for context value lookups to avoid collisions
@@ -25,11 +27,16 @@ func compileCtx(sectionIdx int, typ reflect.Type) (func(context.Context, *http.R
 			continue
 		}
 
+		optional := false
+		if strings.Contains(field.Tag.Get("aku"), "optional") {
+			optional = true
+		}
+
 		params = append(params, Parameter{
 			Name:     field.Name,
 			In:       "context",
 			Type:     field.Type,
-			Required: true,
+			Required: !optional,
 		})
 
 		idx := i
@@ -47,8 +54,16 @@ func compileCtx(sectionIdx int, typ reflect.Type) (func(context.Context, *http.R
 			if val == nil {
 				// Fallback to string key for backwards compatibility
 				val = ctx.Value(tag)
-				if val == nil {
+			}
+
+			if val == nil {
+				if optional {
 					return nil
+				}
+				return &BindError{
+					Field:  field.Name,
+					Source: "context",
+					Err:    fmt.Errorf("missing required context value for %q", tag),
 				}
 			}
 
@@ -60,10 +75,15 @@ func compileCtx(sectionIdx int, typ reflect.Type) (func(context.Context, *http.R
 			reflectVal := reflect.ValueOf(val)
 			targetType := field.Type
 
-			if reflectVal.Type().AssignableTo(targetType) {
-				fieldVal.Set(reflectVal)
+			if !reflectVal.Type().AssignableTo(targetType) {
+				return &BindError{
+					Field:  field.Name,
+					Source: "context",
+					Err:    fmt.Errorf("context value for %q has type %T, expected %s", tag, val, targetType),
+				}
 			}
 
+			fieldVal.Set(reflectVal)
 			return nil
 		})
 	}

@@ -154,8 +154,8 @@ func Generate(title, version string, routes []Route, securitySchemes map[string]
 		// Parameters (path, query, header)
 		schema := r.GetSchema()
 		for _, p := range schema.Parameters {
-			if p.In == "form" {
-				continue // handled below
+			if p.In == "form" || p.In == "context" {
+				continue // form handled below, context is internal
 			}
 			ps := g.reflectToSchema(p.Type)
 			g.applyValidation(&ps, p.Validate)

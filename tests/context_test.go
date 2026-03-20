@@ -16,7 +16,7 @@ type User struct {
 }
 
 type CtxSection struct {
-	User *User `ctx:"user"`
+	User *User `ctx:"user" aku:"optional"`
 }
 
 type CtxInput struct {
