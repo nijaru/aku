@@ -294,6 +294,11 @@ func (g *generator) reflectToSchema(t reflect.Type) Schema {
 		// Use fully qualified name to avoid collisions
 		key := name
 		if pkg := t.PkgPath(); pkg != "" {
+			// Clean up test package suffixes (e.g., github.com/nijaru/aku/tests_test -> github.com/nijaru/aku)
+			pkg = strings.TrimSuffix(pkg, "_test")
+			if strings.HasSuffix(pkg, "/tests") {
+				pkg = strings.TrimSuffix(pkg, "/tests")
+			}
 			key = strings.ReplaceAll(pkg, "/", ".") + "." + name
 		}
 

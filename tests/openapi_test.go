@@ -81,8 +81,8 @@ func TestOpenAPI(t *testing.T) {
 	// Verify components
 	components := raw["components"].(map[string]any)
 	schemas := components["schemas"].(map[string]any)
-	if _, ok := schemas["github.com.nijaru.aku.tests_test.UserResponse"]; !ok {
-		t.Errorf("expected UserResponse in components/schemas, but got %v", schemas)
+	if _, ok := schemas["github.com.nijaru.aku.UserResponse"]; !ok {
+		t.Errorf("expected github.com.nijaru.aku.UserResponse in components/schemas, but got %v", schemas)
 	}
 }
 

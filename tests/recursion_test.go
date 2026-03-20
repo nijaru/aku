@@ -23,7 +23,7 @@ func TestOpenAPI_Recursion(t *testing.T) {
 	doc := app.OpenAPIDocument("Recursion API", "1.0.0")
 
 	// Check components
-	key := "github.com.nijaru.aku.tests_test.Node"
+	key := "github.com.nijaru.aku.Node"
 	nodeSchema, ok := doc.Components.Schemas[key]
 	if !ok {
 		t.Fatalf("expected Node schema in components at key %q", key)
