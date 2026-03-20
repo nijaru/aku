@@ -3,8 +3,10 @@ module github.com/nijaru/aku
 go 1.26.1
 
 require (
+	github.com/andybalholm/brotli v1.2.0
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/google/uuid v1.6.0
+	github.com/klauspost/compress v1.18.5
 	golang.org/x/time v0.15.0
 )
 

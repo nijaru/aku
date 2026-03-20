@@ -2,13 +2,16 @@ package middleware
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/google/uuid"
+	"github.com/klauspost/compress/gzip"
 	"github.com/nijaru/aku/problem"
 	"golang.org/x/time/rate"
 )
@@ -204,4 +207,106 @@ func (w *loggingResponseWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Compress returns a middleware that compresses HTTP responses using Brotli or Gzip.
+// It prioritizes Brotli if the client supports it.
+func Compress(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ae := r.Header.Get("Accept-Encoding")
+		if ae == "" || r.Header.Get("Upgrade") != "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Don't compress if the request is for a stream or similar
+		if strings.Contains(r.Header.Get("Connection"), "Upgrade") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		var writer io.Writer
+		var closer io.Closer
+		var encoding string
+
+		if strings.Contains(ae, "br") {
+			encoding = "br"
+			bw := brotli.NewWriter(w)
+			writer = bw
+			closer = bw
+		} else if strings.Contains(ae, "gzip") {
+			encoding = "gzip"
+			gw := gzip.NewWriter(w)
+			writer = gw
+			closer = gw
+		}
+
+		if encoding != "" {
+			w.Header().Set("Content-Encoding", encoding)
+			w.Header().Add("Vary", "Accept-Encoding")
+			cw := &compressionResponseWriter{
+				ResponseWriter: w,
+				writer:         writer,
+				closer:         closer,
+			}
+			defer cw.Close()
+			next.ServeHTTP(cw, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+type compressionResponseWriter struct {
+	http.ResponseWriter
+	writer io.Writer
+	closer io.Closer
+	wrote  bool
+}
+
+func (w *compressionResponseWriter) WriteHeader(status int) {
+	if w.wrote {
+		return
+	}
+	// Decide if we should compress based on content type
+	ct := w.Header().Get("Content-Type")
+	if ct != "" && !isCompressible(ct) {
+		w.Header().Del("Content-Encoding")
+		w.writer = w.ResponseWriter
+		w.closer = nil
+	}
+	w.ResponseWriter.WriteHeader(status)
+	w.wrote = true
+}
+
+func (w *compressionResponseWriter) Write(b []byte) (int, error) {
+	if !w.wrote {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.writer.Write(b)
+}
+
+func (w *compressionResponseWriter) Close() error {
+	if w.closer != nil {
+		return w.closer.Close()
+	}
+	return nil
+}
+
+func (w *compressionResponseWriter) Flush() {
+	if f, ok := w.writer.(http.Flusher); ok {
+		f.Flush()
+	} else if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func isCompressible(ct string) bool {
+	ct = strings.ToLower(ct)
+	return strings.Contains(ct, "text/") ||
+		strings.Contains(ct, "json") ||
+		strings.Contains(ct, "javascript") ||
+		strings.Contains(ct, "xml") ||
+		strings.Contains(ct, "html")
 }
