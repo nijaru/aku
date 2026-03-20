@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/nijaru/aku"
@@ -34,53 +35,64 @@ func benchHandler(ctx context.Context, in BenchInput) (BenchOutput, error) {
 	}, nil
 }
 
-func BenchmarkHandler(b *testing.B) {
+// BenchmarkAku measures the full Aku pipeline: routing, extraction, validation, and rendering.
+func BenchmarkAku(b *testing.B) {
 	app := aku.New()
 	aku.Get(app, "/test/{id}", benchHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
 	w := httptest.NewRecorder()
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
 		app.ServeHTTP(w, req)
 	}
 }
 
+// BenchmarkAkuParallel measures the Aku pipeline under concurrent load.
+func BenchmarkAkuParallel(b *testing.B) {
+	app := aku.New()
+	aku.Get(app, "/test/{id}", benchHandler)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
+		w := httptest.NewRecorder()
+		for pb.Next() {
+			app.ServeHTTP(w, req)
+		}
+	})
+}
+
+// BenchmarkAkuHandleHTTP measures the "escape hatch" for standard handlers.
+func BenchmarkAkuHandleHTTP(b *testing.B) {
+	app := aku.New()
+	app.HandleHTTP(http.MethodGet, "/test/{id}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}), aku.WithSummary("benchmark handler"))
+
+	req := httptest.NewRequest(http.MethodGet, "/test/123", nil)
+	w := httptest.NewRecorder()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		app.ServeHTTP(w, req)
+	}
+}
+
+// BenchmarkStdlib measures the Go 1.22+ ServeMux with equivalent manual logic.
 func BenchmarkStdlib(b *testing.B) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /test/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		query := r.URL.Query()
 		filter := query.Get("filter")
-		page := 1
-
-		out := BenchOutput{
-			ID:     id,
-			Filter: filter,
-			Page:   page,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(out)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
-	w := httptest.NewRecorder()
-
-	b.ResetTimer()
-	for b.Loop() {
-		mux.ServeHTTP(w, req)
-	}
-}
-
-func BenchmarkStdlibMarshal(b *testing.B) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /test/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		query := r.URL.Query()
-		filter := query.Get("filter")
-		page := 1
+		pageStr := query.Get("page")
+		page, _ := strconv.Atoi(pageStr)
 
 		out := BenchOutput{
 			ID:     id,
@@ -97,8 +109,42 @@ func BenchmarkStdlibMarshal(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
 	w := httptest.NewRecorder()
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
 		mux.ServeHTTP(w, req)
 	}
+}
+
+// BenchmarkStdlibParallel measures the standard library under concurrent load.
+func BenchmarkStdlibParallel(b *testing.B) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /test/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		query := r.URL.Query()
+		filter := query.Get("filter")
+		pageStr := query.Get("page")
+		page, _ := strconv.Atoi(pageStr)
+
+		out := BenchOutput{
+			ID:     id,
+			Filter: filter,
+			Page:   page,
+		}
+
+		data, _ := json.Marshal(out)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(data)
+	})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
+		w := httptest.NewRecorder()
+		for pb.Next() {
+			mux.ServeHTTP(w, req)
+		}
+	})
 }

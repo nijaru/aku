@@ -20,7 +20,8 @@ type Handler[In any, Out any] func(context.Context, In) (Out, error)
 // Router is the interface implemented by App and Group for route registration.
 type Router interface {
 	Handle(method, pattern string, handler http.Handler, route *Route)
-	HandleHTTP(method, pattern string, handler http.Handler)
+	HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption)
+	Metrics(pattern string, handler http.Handler, opts ...RouteOption)
 	App() *App
 	Prefix() string
 	Middleware() []func(http.Handler) http.Handler

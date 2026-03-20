@@ -69,13 +69,30 @@ func (a *App) Handle(method, pattern string, handler http.Handler, route *Route)
 // HandleHTTP registers a standard http.Handler on the application's multiplexer.
 // This is useful for integrating third-party handlers like Prometheus or health checks
 // that don't follow the typed Handler[In, Out] pattern.
-func (a *App) HandleHTTP(method, pattern string, handler http.Handler) {
+func (a *App) HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption) {
+	meta := defaultRouteMeta()
+	for _, opt := range opts {
+		opt(&meta)
+	}
+
 	a.mux.Handle(method+" "+pattern, handler)
+
+	route := &Route{
+		Method:      method,
+		Pattern:     pattern,
+		Summary:     meta.summary,
+		Description: meta.description,
+		Tags:        meta.tags,
+		Internal:    meta.internal,
+		Deprecated:  meta.deprecated,
+		OperationID: meta.operationID,
+	}
+	a.routes = append(a.routes, route)
 }
 
 // Metrics registers a standard http.Handler for serving metrics (e.g., Prometheus).
-func (a *App) Metrics(pattern string, handler http.Handler) {
-	a.HandleHTTP(http.MethodGet, pattern, handler)
+func (a *App) Metrics(pattern string, handler http.Handler, opts ...RouteOption) {
+	a.HandleHTTP(http.MethodGet, pattern, handler, opts...)
 }
 
 func (a *App) App() *App                                     { return a }

@@ -25,8 +25,13 @@ func (g *Group) Handle(method, pattern string, handler http.Handler, route *Rout
 }
 
 // HandleHTTP registers a standard http.Handler on the group's prefix.
-func (g *Group) HandleHTTP(method, pattern string, handler http.Handler) {
-	g.app.HandleHTTP(method, g.prefix+pattern, handler)
+func (g *Group) HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption) {
+	g.app.HandleHTTP(method, g.prefix+pattern, handler, opts...)
+}
+
+// Metrics registers a standard http.Handler for serving metrics on the group's prefix.
+func (g *Group) Metrics(pattern string, handler http.Handler, opts ...RouteOption) {
+	g.HandleHTTP(http.MethodGet, pattern, handler, opts...)
 }
 
 func (g *Group) App() *App                                     { return g.app }
