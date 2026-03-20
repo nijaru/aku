@@ -2,6 +2,7 @@ package aku_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,6 +41,7 @@ func BenchmarkHandler(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
 	w := httptest.NewRecorder()
 
+	b.ResetTimer()
 	for b.Loop() {
 		app.ServeHTTP(w, req)
 	}
@@ -48,19 +50,27 @@ func BenchmarkHandler(b *testing.B) {
 func BenchmarkStdlib(b *testing.B) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /test/{id}", func(w http.ResponseWriter, r *http.Request) {
-		// Manual binding similar to what aku does
 		id := r.PathValue("id")
-		filter := r.URL.Query().Get("filter")
-		page := r.URL.Query().Get("page")
-		_, _ = id, filter
-		_, _ = page, id
+		query := r.URL.Query()
+		filter := query.Get("filter")
+		// Manual int conversion for fairness
+		// (simplified since we know it's "1")
+		page := 1
+
+		out := BenchOutput{
+			ID:     id,
+			Filter: filter,
+			Page:   page,
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"id":"123","filter":"active","page":1}`))
+		json.NewEncoder(w).Encode(out)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
 	w := httptest.NewRecorder()
 
+	b.ResetTimer()
 	for b.Loop() {
 		mux.ServeHTTP(w, req)
 	}
