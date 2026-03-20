@@ -2,8 +2,10 @@ package bind
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -17,16 +19,56 @@ func compileHeader(sectionIdx int, typ reflect.Type) (internalExtractor, []Param
 
 	return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
 		section := v.Field(sectionIdx)
+
+		var consumed map[string]struct{}
+		if cfg.StrictHeader {
+			consumed = make(map[string]struct{}, len(r.Header))
+		}
+
 		for _, step := range steps {
-			if err := step(r.Header, section); err != nil {
+			if err := step(r.Header, section, consumed); err != nil {
 				return err
 			}
 		}
+
+		if cfg.StrictHeader {
+			for k := range r.Header {
+				// Standard headers that we should ignore
+				if isStandardHeader(k) {
+					continue
+				}
+
+				if _, ok := consumed[k]; !ok {
+					return &BindError{Field: k, Source: "header", Err: fmt.Errorf("unknown parameter")}
+				}
+			}
+		}
+
 		return nil
 	}, params
 }
 
-type headerStep func(http.Header, reflect.Value) error
+func isStandardHeader(h string) bool {
+	h = strings.ToLower(h)
+	// Common standard headers to ignore in strict mode
+	standard := []string{
+		"accept", "accept-encoding", "accept-language", "connection",
+		"cookie", "content-length", "content-type", "host",
+		"origin", "referer", "sec-ch-ua", "sec-ch-ua-mobile",
+		"sec-ch-ua-platform", "sec-fetch-dest", "sec-fetch-mode",
+		"sec-fetch-site", "sec-fetch-user", "upgrade-insecure-requests",
+		"user-agent", "x-forwarded-for", "x-forwarded-host",
+		"x-forwarded-proto", "x-request-id", "traceparent",
+	}
+	for _, s := range standard {
+		if h == s {
+			return true
+		}
+	}
+	return false
+}
+
+type headerStep func(http.Header, reflect.Value, map[string]struct{}) error
 
 func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parameter) {
 	var steps []headerStep
@@ -56,13 +98,17 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !isBinder && !isText {
 			subSteps, subParams := compileHeaderLevel(fTyp, name)
 			subPrefix := name + "["
-			steps = append(steps, func(h http.Header, v reflect.Value) error {
+			steps = append(steps, func(h http.Header, v reflect.Value, consumed map[string]struct{}) error {
 				// Only allocate/recurse if there's actually data for this struct
 				found := false
 				for k := range h {
 					if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
 						found = true
-						break
+						if consumed != nil {
+							// Sub-steps will mark individual keys
+						} else {
+							break
+						}
 					}
 				}
 				if !found {
@@ -77,7 +123,7 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 					f = f.Elem()
 				}
 				for _, subStep := range subSteps {
-					if err := subStep(h, f); err != nil {
+					if err := subStep(h, f, consumed); err != nil {
 						return err
 					}
 				}
@@ -95,17 +141,22 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 		if isSlice {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			sliceTyp := field.Type
-			steps = append(steps, func(header http.Header, v reflect.Value) error {
-				vals := header[fieldName]
-				if len(vals) > 0 {
-					f := v.Field(fieldIdx)
-					slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
-					for i, val := range vals {
-						if err := elemCoercer(val, slice.Index(i)); err != nil {
-							return &BindError{Field: fieldName, Source: "header", Err: err}
-						}
+			steps = append(steps, func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
+				vals, ok := header[fieldName]
+				if ok {
+					if consumed != nil {
+						consumed[http.CanonicalHeaderKey(fieldName)] = struct{}{}
 					}
-					f.Set(slice)
+					if len(vals) > 0 {
+						f := v.Field(fieldIdx)
+						slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
+						for i, val := range vals {
+							if err := elemCoercer(val, slice.Index(i)); err != nil {
+								return &BindError{Field: fieldName, Source: "header", Err: err}
+							}
+						}
+						f.Set(slice)
+					}
 				}
 				return nil
 			})
@@ -113,12 +164,15 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			mapTyp := field.Type
 			isPrefix := fieldName[len(fieldName)-1] == '-'
-			steps = append(steps, func(header http.Header, v reflect.Value) error {
+			steps = append(steps, func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
 				m := reflect.MakeMap(mapTyp)
 				found := false
 				for k, vals := range header {
 					if isPrefix {
-						if len(k) > len(fieldName) && k[:len(fieldName)] == fieldName {
+						if len(k) > len(fieldName) && strings.EqualFold(k[:len(fieldName)], fieldName) {
+							if consumed != nil {
+								consumed[k] = struct{}{}
+							}
 							key := k[len(fieldName):]
 							val := vals[0]
 							valVal := reflect.New(mapTyp.Elem()).Elem()
@@ -130,7 +184,10 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 						}
 					} else {
 						mapPrefix := fieldName + "["
-						if len(k) > len(mapPrefix)+1 && k[:len(mapPrefix)] == mapPrefix && k[len(k)-1] == ']' {
+						if len(k) > len(mapPrefix)+1 && strings.EqualFold(k[:len(mapPrefix)], mapPrefix) && k[len(k)-1] == ']' {
+							if consumed != nil {
+								consumed[k] = struct{}{}
+							}
 							key := k[len(mapPrefix) : len(k)-1]
 							val := vals[0]
 							valVal := reflect.New(mapTyp.Elem()).Elem()
@@ -149,11 +206,17 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 			})
 		} else {
 			coercer := PrecompileCoercer(field.Type)
-			steps = append(steps, func(header http.Header, v reflect.Value) error {
-				val := header.Get(fieldName)
-				if val != "" {
-					if err := coercer(val, v.Field(fieldIdx)); err != nil {
-						return &BindError{Field: fieldName, Source: "header", Err: err}
+			steps = append(steps, func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
+				vals, ok := header[fieldName]
+				if ok {
+					if consumed != nil {
+						consumed[http.CanonicalHeaderKey(fieldName)] = struct{}{}
+					}
+					val := vals[0]
+					if val != "" {
+						if err := coercer(val, v.Field(fieldIdx)); err != nil {
+							return &BindError{Field: fieldName, Source: "header", Err: err}
+						}
 					}
 				}
 				return nil

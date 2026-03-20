@@ -29,7 +29,7 @@ func GetUser(ctx context.Context, in UserRequest) (*UserResponse, error) {
 
 func TestOpenAPI(t *testing.T) {
 	app := aku.New()
-	aku.Get(app, "/users/{id}", GetUser, 
+	aku.Get(app, "/users/{id}", GetUser,
 		aku.WithSummary("Get a user"),
 		aku.WithDescription("Returns a user by their ID"),
 		aku.WithTags("Users"),
@@ -73,7 +73,7 @@ func TestOpenAPI(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("failed to unmarshal generated JSON: %v", err)
 	}
-	
+
 	if raw["openapi"] != "3.0.3" {
 		t.Errorf("expected openapi 3.0.3, got %v", raw["openapi"])
 	}
@@ -81,8 +81,8 @@ func TestOpenAPI(t *testing.T) {
 	// Verify components
 	components := raw["components"].(map[string]any)
 	schemas := components["schemas"].(map[string]any)
-	if _, ok := schemas["github.com.nijaru.aku_test.UserResponse"]; !ok {
-		t.Error("expected UserResponse in components/schemas")
+	if _, ok := schemas["github.com.nijaru.aku.tests_test.UserResponse"]; !ok {
+		t.Errorf("expected UserResponse in components/schemas, but got %v", schemas)
 	}
 }
 
@@ -133,4 +133,3 @@ func TestOpenAPI_Advanced(t *testing.T) {
 		t.Errorf("expected text/event-stream response, got %v", res.Content)
 	}
 }
-

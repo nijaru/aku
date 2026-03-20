@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/problem"
 )
 
 func TestApp_MuxErrors(t *testing.T) {
@@ -27,7 +28,7 @@ func TestApp_MuxErrors(t *testing.T) {
 			t.Errorf("Expected content-type application/problem+json, got %q", w.Header().Get("Content-Length"))
 		}
 
-		var prob aku.Problem
+		var prob problem.Details
 		if err := json.NewDecoder(w.Body).Decode(&prob); err != nil {
 			t.Fatal(err)
 		}
@@ -55,7 +56,7 @@ func TestApp_MuxErrors(t *testing.T) {
 			t.Errorf("Expected content-type application/problem+json, got %q", w.Header().Get("Content-Type"))
 		}
 
-		var prob aku.Problem
+		var prob problem.Details
 		if err := json.NewDecoder(w.Body).Decode(&prob); err != nil {
 			t.Fatal(err)
 		}
@@ -69,7 +70,7 @@ func TestApp_MuxErrors(t *testing.T) {
 func TestApp_Custom404(t *testing.T) {
 	app := aku.New()
 	aku.Get(app, "/custom-404", func(ctx context.Context, in struct{}) (string, error) {
-		return "", aku.Problemf(http.StatusNotFound, "Custom 404", "This is a custom 404")
+		return "", problem.Problemf(http.StatusNotFound, "Custom 404", "This is a custom 404")
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/custom-404", nil)
@@ -80,7 +81,7 @@ func TestApp_Custom404(t *testing.T) {
 		t.Errorf("Expected status 404, got %d", w.Code)
 	}
 
-	var prob aku.Problem
+	var prob problem.Details
 	if err := json.NewDecoder(w.Body).Decode(&prob); err != nil {
 		t.Fatal(err)
 	}

@@ -8,11 +8,12 @@ import (
 
 	"github.com/nijaru/aku"
 	"github.com/nijaru/aku/internal/testutil"
+	"github.com/nijaru/aku/middleware"
 )
 
 func TestMiddleware_Recover(t *testing.T) {
 	app := aku.New()
-	app.Use(aku.Recover)
+	app.Use(middleware.Recover)
 
 	aku.Get(app, "/panic", func(ctx context.Context, in struct{}) (string, error) {
 		panic("boom")
@@ -30,7 +31,7 @@ func TestMiddleware_Recover(t *testing.T) {
 
 func TestMiddleware_Timeout(t *testing.T) {
 	app := aku.New()
-	app.Use(aku.Timeout(10 * time.Millisecond))
+	app.Use(middleware.Timeout(10 * time.Millisecond))
 
 	aku.Get(app, "/slow", func(ctx context.Context, in struct{}) (string, error) {
 		select {
@@ -48,7 +49,7 @@ func TestMiddleware_Timeout(t *testing.T) {
 
 func TestMiddleware_CORS(t *testing.T) {
 	app := aku.New()
-	app.Use(aku.CORS(aku.CORSOptions{
+	app.Use(middleware.CORS(middleware.CORSOptions{
 		AllowedOrigins: []string{"http://example.com"},
 		AllowedMethods: []string{"GET", "POST"},
 		AllowedHeaders: []string{"Content-Type"},
@@ -71,7 +72,7 @@ func TestMiddleware_CORS(t *testing.T) {
 			Get("/cors").
 			WithHeader("Origin", "http://attacker.com").
 			Do()
-		
+
 		if resp.Header().Get("Access-Control-Allow-Origin") != "" {
 			t.Error("expected no CORS header for invalid origin")
 		}

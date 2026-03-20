@@ -1,4 +1,4 @@
-package aku
+package problem
 
 import (
 	"errors"
@@ -16,9 +16,9 @@ type InvalidParam struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// Problem represents an RFC 9457 Problem Details for HTTP APIs.
+// Details represents an RFC 9457 Problem Details for HTTP APIs.
 // It implements the standard error interface.
-type Problem struct {
+type Details struct {
 	Type          string         `json:"type,omitempty"`
 	Title         string         `json:"title,omitempty"`
 	Status        int            `json:"status,omitempty"`
@@ -27,7 +27,7 @@ type Problem struct {
 }
 
 // Error implements the error interface.
-func (p *Problem) Error() string {
+func (p *Details) Error() string {
 	if p.Detail != "" {
 		return fmt.Sprintf("[%d] %s: %s", p.Status, p.Title, p.Detail)
 	}
@@ -35,8 +35,8 @@ func (p *Problem) Error() string {
 }
 
 // BadRequest creates a generic 400 Bad Request problem.
-func BadRequest(detail string) *Problem {
-	return &Problem{
+func BadRequest(detail string) *Details {
+	return &Details{
 		Type:   "about:blank",
 		Title:  "Bad Request",
 		Status: http.StatusBadRequest,
@@ -45,8 +45,8 @@ func BadRequest(detail string) *Problem {
 }
 
 // ValidationProblem creates a 422 Unprocessable Entity problem with validation details.
-func ValidationProblem(detail string, params []InvalidParam) *Problem {
-	return &Problem{
+func ValidationProblem(detail string, params []InvalidParam) *Details {
+	return &Details{
 		Type:          "https://aku.sh/problems/validation",
 		Title:         "Validation failed",
 		Status:        http.StatusUnprocessableEntity,
@@ -56,8 +56,8 @@ func ValidationProblem(detail string, params []InvalidParam) *Problem {
 }
 
 // NotFound creates a generic 404 Not Found problem.
-func NotFound(detail string) *Problem {
-	return &Problem{
+func NotFound(detail string) *Details {
+	return &Details{
 		Type:   "about:blank",
 		Title:  "Not Found",
 		Status: http.StatusNotFound,
@@ -66,8 +66,8 @@ func NotFound(detail string) *Problem {
 }
 
 // Forbidden creates a generic 403 Forbidden problem.
-func Forbidden(detail string) *Problem {
-	return &Problem{
+func Forbidden(detail string) *Details {
+	return &Details{
 		Type:   "about:blank",
 		Title:  "Forbidden",
 		Status: http.StatusForbidden,
@@ -76,8 +76,8 @@ func Forbidden(detail string) *Problem {
 }
 
 // TooManyRequests creates a generic 429 Too Many Requests problem.
-func TooManyRequests(detail string) *Problem {
-	return &Problem{
+func TooManyRequests(detail string) *Details {
+	return &Details{
 		Type:   "about:blank",
 		Title:  "Too Many Requests",
 		Status: http.StatusTooManyRequests,
@@ -86,8 +86,8 @@ func TooManyRequests(detail string) *Problem {
 }
 
 // Problemf creates a custom problem with a formatted detail string.
-func Problemf(status int, title, format string, args ...any) *Problem {
-	return &Problem{
+func Problemf(status int, title, format string, args ...any) *Details {
+	return &Details{
 		Type:   "about:blank",
 		Title:  title,
 		Status: status,
@@ -119,7 +119,7 @@ func FromValidationErrors(errs validator.ValidationErrors) []InvalidParam {
 }
 
 func defaultErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	prob, ok := errors.AsType[*Problem](err)
+	prob, ok := errors.AsType[*Details](err)
 	if !ok {
 		// Wrap unexpected application errors into a 500 Internal Server Error problem.
 		prob = Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error())

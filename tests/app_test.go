@@ -28,4 +28,3 @@ func TestApp_Middleware(t *testing.T) {
 		t.Errorf("expected X-Global-Middleware header, got %q", rr.Header().Get("X-Global-Middleware"))
 	}
 }
-

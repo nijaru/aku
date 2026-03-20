@@ -2,6 +2,7 @@ package bind
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -19,16 +20,31 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 	return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
 		section := v.Field(sectionIdx)
 		query := r.URL.Query()
+
+		var consumed map[string]struct{}
+		if cfg.StrictQuery {
+			consumed = make(map[string]struct{}, len(query))
+		}
+
 		for _, step := range steps {
-			if err := step(query, section); err != nil {
+			if err := step(query, section, consumed); err != nil {
 				return err
 			}
 		}
+
+		if cfg.StrictQuery {
+			for k := range query {
+				if _, ok := consumed[k]; !ok {
+					return &BindError{Field: k, Source: "query", Err: fmt.Errorf("unknown parameter")}
+				}
+			}
+		}
+
 		return nil
 	}, params
 }
 
-type queryStep func(url.Values, reflect.Value) error
+type queryStep func(url.Values, reflect.Value, map[string]struct{}) error
 
 func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Parameter) {
 	var steps []queryStep
@@ -58,13 +74,17 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !isBinder && !isText {
 			subSteps, subParams := compileQueryLevel(fTyp, name)
 			subPrefix := name + "["
-			steps = append(steps, func(q url.Values, v reflect.Value) error {
+			steps = append(steps, func(q url.Values, v reflect.Value, consumed map[string]struct{}) error {
 				// Only allocate/recurse if there's actually data for this struct
 				found := false
 				for k := range q {
 					if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
 						found = true
-						break
+						if consumed != nil {
+							// We don't mark individual keys here, sub-steps will do it
+						} else {
+							break
+						}
 					}
 				}
 				if !found {
@@ -79,7 +99,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 					f = f.Elem()
 				}
 				for _, subStep := range subSteps {
-					if err := subStep(q, f); err != nil {
+					if err := subStep(q, f, consumed); err != nil {
 						return err
 					}
 				}
@@ -98,30 +118,38 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 		if isSlice {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			sliceTyp := field.Type
-			steps = append(steps, func(query url.Values, v reflect.Value) error {
-				vals := query[fieldName]
-				if len(vals) > 0 {
-					f := v.Field(fieldIdx)
-					slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
-					for i, val := range vals {
-						if err := elemCoercer(val, slice.Index(i)); err != nil {
-							return &BindError{Field: fieldName, Source: "query", Err: err}
-						}
+			steps = append(steps, func(query url.Values, v reflect.Value, consumed map[string]struct{}) error {
+				vals, ok := query[fieldName]
+				if ok {
+					if consumed != nil {
+						consumed[fieldName] = struct{}{}
 					}
-					f.Set(slice)
+					if len(vals) > 0 {
+						f := v.Field(fieldIdx)
+						slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
+						for i, val := range vals {
+							if err := elemCoercer(val, slice.Index(i)); err != nil {
+								return &BindError{Field: fieldName, Source: "query", Err: err}
+							}
+						}
+						f.Set(slice)
+					}
 				}
 				return nil
 			})
 		} else if isMap {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			mapTyp := field.Type
-			steps = append(steps, func(query url.Values, v reflect.Value) error {
+			steps = append(steps, func(query url.Values, v reflect.Value, consumed map[string]struct{}) error {
 				// Support name[key]=val pattern for maps
 				prefix := fieldName + "["
 				m := reflect.MakeMap(mapTyp)
 				found := false
 				for k, vals := range query {
 					if len(k) > len(prefix)+1 && k[:len(prefix)] == prefix && k[len(k)-1] == ']' {
+						if consumed != nil {
+							consumed[k] = struct{}{}
+						}
 						key := k[len(prefix) : len(k)-1]
 						val := vals[0] // take first for map
 						valVal := reflect.New(mapTyp.Elem()).Elem()
@@ -139,11 +167,17 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 			})
 		} else {
 			coercer := PrecompileCoercer(field.Type)
-			steps = append(steps, func(query url.Values, v reflect.Value) error {
-				val := query.Get(fieldName)
-				if val != "" {
-					if err := coercer(val, v.Field(fieldIdx)); err != nil {
-						return &BindError{Field: fieldName, Source: "query", Err: err}
+			steps = append(steps, func(query url.Values, v reflect.Value, consumed map[string]struct{}) error {
+				vals, ok := query[fieldName]
+				if ok {
+					if consumed != nil {
+						consumed[fieldName] = struct{}{}
+					}
+					val := vals[0]
+					if val != "" {
+						if err := coercer(val, v.Field(fieldIdx)); err != nil {
+							return &BindError{Field: fieldName, Source: "query", Err: err}
+						}
 					}
 				}
 				return nil

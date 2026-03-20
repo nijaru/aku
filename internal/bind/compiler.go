@@ -10,6 +10,8 @@ import (
 // Config holds configuration for the binder extractors.
 type Config struct {
 	MaxMultipartMemory int64
+	StrictQuery        bool
+	StrictHeader       bool
 }
 
 // Extractor is a precompiled function that populates an input struct

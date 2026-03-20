@@ -1,4 +1,4 @@
-package aku
+package middleware
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nijaru/aku/problem"
 	"golang.org/x/time/rate"
 )
 
@@ -110,7 +111,7 @@ func Limit(rps float64, burst int) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !limiter.Allow() {
-				prob := TooManyRequests("Rate limit exceeded")
+				prob := problem.TooManyRequests("Rate limit exceeded")
 				w.Header().Set("Content-Type", "application/problem+json")
 				w.WriteHeader(prob.Status)
 				// Small hack to marshal JSON since we don't have access to render here easily

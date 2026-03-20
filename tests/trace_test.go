@@ -8,14 +8,15 @@ import (
 
 	"github.com/nijaru/aku"
 	"github.com/nijaru/aku/internal/testutil"
+	"github.com/nijaru/aku/middleware"
 )
 
 func TestMiddleware_RequestID(t *testing.T) {
 	app := aku.New()
-	app.Use(aku.RequestID)
+	app.Use(middleware.RequestID)
 
 	aku.Get(app, "/trace", func(ctx context.Context, _ struct{}) (string, error) {
-		return aku.GetRequestID(ctx), nil
+		return middleware.GetRequestID(ctx), nil
 	})
 
 	t.Run("Generates new ID", func(t *testing.T) {

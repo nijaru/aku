@@ -13,10 +13,10 @@ import (
 
 // Document represents an OpenAPI 3.0.3 document.
 type Document struct {
-	OpenAPI    string                `json:"openapi"`
-	Info       Info                  `json:"info"`
-	Paths      map[string]PathItem   `json:"paths"`
-	Components *Components           `json:"components,omitempty"`
+	OpenAPI    string              `json:"openapi"`
+	Info       Info                `json:"info"`
+	Paths      map[string]PathItem `json:"paths"`
+	Components *Components         `json:"components,omitempty"`
 }
 
 type Info struct {
@@ -95,7 +95,7 @@ func (d *Document) JSON() ([]byte, error) {
 }
 
 // Route is the interface required by the generator.
-// This decouples the generator from the main aku package if needed, 
+// This decouples the generator from the main aku package if needed,
 // though we usually pass aku.Route.
 type Route interface {
 	GetMethod() string

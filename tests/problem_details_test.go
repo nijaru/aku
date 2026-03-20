@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/problem"
 )
 
 func TestProblem_Error(t *testing.T) {
-	p := aku.BadRequest("invalid format")
+	p := problem.BadRequest("invalid format")
 
 	// Problem must implement error interface
 	var _ error = p
@@ -20,10 +20,10 @@ func TestProblem_Error(t *testing.T) {
 }
 
 func TestValidationProblem(t *testing.T) {
-	params := []aku.InvalidParam{
+	params := []problem.InvalidParam{
 		{Name: "email", In: "body", Reason: "must be a valid email"},
 	}
-	p := aku.ValidationProblem("Request body failed validation", params)
+	p := problem.ValidationProblem("Request body failed validation", params)
 
 	if p.Status != http.StatusUnprocessableEntity {
 		t.Errorf("expected status %d, got %d", http.StatusUnprocessableEntity, p.Status)

@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/nijaru/aku/internal/bind"
 	"github.com/nijaru/aku/internal/render"
+	"github.com/nijaru/aku/problem"
 )
 
 // Handler is the canonical typed handler signature.
@@ -19,6 +20,7 @@ type Handler[In any, Out any] func(context.Context, In) (Out, error)
 // Router is the interface implemented by App and Group for route registration.
 type Router interface {
 	Handle(method, pattern string, handler http.Handler, route *Route)
+	HandleHTTP(method, pattern string, handler http.Handler)
 	App() *App
 	Prefix() string
 	Middleware() []func(http.Handler) http.Handler
@@ -102,38 +104,6 @@ func WithSecurityName(name string) RouteOption {
 	}
 }
 
-// Group represents a group of routes with a common prefix and middleware.
-type Group struct {
-	app        *App
-	prefix     string
-	middleware []func(http.Handler) http.Handler
-}
-
-// Group creates a new sub-group from this group.
-func (g *Group) Group(prefix string, mw ...func(http.Handler) http.Handler) *Group {
-	return &Group{
-		app:        g.app,
-		prefix:     g.prefix + prefix,
-		middleware: append(append([]func(http.Handler) http.Handler{}, g.middleware...), mw...),
-	}
-}
-
-func (g *Group) Handle(method, pattern string, handler http.Handler, route *Route) {
-	g.app.Handle(method, g.prefix+pattern, handler, route)
-}
-
-func (g *Group) App() *App                            { return g.app }
-func (g *Group) Prefix() string                       { return g.prefix }
-func (g *Group) Middleware() []func(http.Handler) http.Handler { return g.middleware }
-
-func (g *Group) Static(prefix, root string) {
-	g.app.Static(g.prefix+prefix, root)
-}
-
-func (g *Group) StaticFS(prefix string, fs http.FileSystem) {
-	g.app.StaticFS(g.prefix+prefix, fs)
-}
-
 // Get registers a new GET route on the router.
 func Get[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
 	return register(r, http.MethodGet, pattern, handler, opts...)
@@ -214,7 +184,7 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 		// 1. Extract and bind parameters.
 		if err := extractor(r.Context(), r, in, pooled.val, app.bindConfig); err != nil {
 			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
-				handleError(app, w, r, ValidationProblem("Request extraction or validation failed", []InvalidParam{
+				handleError(app, w, r, problem.ValidationProblem("Request extraction or validation failed", []problem.InvalidParam{
 					{
 						Name:   bindErr.Field,
 						In:     bindErr.Source,
@@ -222,10 +192,10 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 					},
 				}))
 			} else {
-				if prob, ok := errors.AsType[*Problem](err); ok {
+				if prob, ok := errors.AsType[*problem.Details](err); ok {
 					handleError(app, w, r, prob)
 				} else {
-					handleError(app, w, r, BadRequest(err.Error()))
+					handleError(app, w, r, problem.BadRequest(err.Error()))
 				}
 			}
 			return
@@ -235,9 +205,9 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 		if app.validator != nil {
 			if err := app.validator.Struct(in); err != nil {
 				if vErr, ok := errors.AsType[validator.ValidationErrors](err); ok {
-					handleError(app, w, r, ValidationProblem("Input validation failed", FromValidationErrors(vErr)))
+					handleError(app, w, r, problem.ValidationProblem("Input validation failed", problem.FromValidationErrors(vErr)))
 				} else {
-					handleError(app, w, r, BadRequest(err.Error()))
+					handleError(app, w, r, problem.BadRequest(err.Error()))
 				}
 				return
 			}
@@ -336,10 +306,10 @@ func handleError(app *App, w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 
-	if prob, ok := errors.AsType[*Problem](err); ok {
+	if prob, ok := errors.AsType[*problem.Details](err); ok {
 		render.Problem(w, prob.Status, prob)
 	} else {
 		// Default behavior for non-Problem errors
-		render.Problem(w, http.StatusInternalServerError, Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error()))
+		render.Problem(w, http.StatusInternalServerError, problem.Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error()))
 	}
 }

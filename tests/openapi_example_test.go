@@ -36,11 +36,11 @@ func TestOpenAPI_Examples(t *testing.T) {
 	// Check Body schema examples
 	bodyContent := path.RequestBody.Content["application/json"]
 	bodySchema := bodyContent.Schema
-	
+
 	// Since we use reflectToSchema, Body points to a named or anonymous struct.
 	// In this case it's an anonymous struct because field.Type was used directly in compiler.go:96
 	// Wait, compiler.go:96: schema.Body = field.Type. field.Type is ExampleRequest.Body (anonymous struct).
-	
+
 	nameProp := bodySchema.Properties["name"]
 	if nameProp.Example != "Nick" {
 		t.Errorf("expected name example 'Nick', got %v", nameProp.Example)

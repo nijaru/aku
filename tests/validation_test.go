@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/problem"
 )
 
 type ValidatedRequest struct {
@@ -55,7 +56,7 @@ func TestValidation(t *testing.T) {
 			t.Errorf("Expected status 422, got %d", w.Code)
 		}
 
-		var prob aku.Problem
+		var prob problem.Details
 		if err := json.NewDecoder(w.Body).Decode(&prob); err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +84,7 @@ func TestValidation(t *testing.T) {
 			t.Errorf("Expected status 422, got %d", w.Code)
 		}
 
-		var prob aku.Problem
+		var prob problem.Details
 		if err := json.NewDecoder(w.Body).Decode(&prob); err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +111,7 @@ func TestGlobalErrorHandler(t *testing.T) {
 	}))
 
 	aku.Post(app, "/error", func(ctx context.Context, in struct{}) (struct{}, error) {
-		return struct{}{}, aku.BadRequest("Something went wrong")
+		return struct{}{}, problem.BadRequest("Something went wrong")
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/error", nil)
@@ -141,13 +142,13 @@ func TestFileUpload(t *testing.T) {
 
 	aku.Post(app, "/upload", func(ctx context.Context, in FileUploadRequest) (ValidatedResponse, error) {
 		if in.Form.Name != "test-file" {
-			return ValidatedResponse{}, aku.BadRequest("Invalid name")
+			return ValidatedResponse{}, problem.BadRequest("Invalid name")
 		}
 		if in.Form.File == nil {
-			return ValidatedResponse{}, aku.BadRequest("File is missing")
+			return ValidatedResponse{}, problem.BadRequest("File is missing")
 		}
 		if in.Form.File.Filename != "hello.txt" {
-			return ValidatedResponse{}, aku.BadRequest("Invalid filename")
+			return ValidatedResponse{}, problem.BadRequest("Invalid filename")
 		}
 		return ValidatedResponse{Message: "Uploaded " + in.Form.File.Filename}, nil
 	})

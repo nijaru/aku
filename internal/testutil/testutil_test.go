@@ -28,10 +28,10 @@ func TestTester_Fixes(t *testing.T) {
 
 	t.Run("Body exhaustion fix", func(t *testing.T) {
 		req := at.Post("/echo").WithJSON(User{ID: 1, Name: "Alice"})
-		
+
 		// First call
 		req.ExpectStatus(http.StatusOK).ExpectJSON(User{ID: 1, Name: "Alice"})
-		
+
 		// Second call with same request builder should work now
 		req.ExpectStatus(http.StatusOK).ExpectJSON(User{ID: 1, Name: "Alice"})
 	})
@@ -70,5 +70,5 @@ func TestTester_WithBody(t *testing.T) {
 	at.Post("/body").
 		WithBody(strings.NewReader(`{"foo":"bar"}`)).
 		ExpectStatus(http.StatusOK).
-		ExpectJSON(map[string]string{"foo":"bar"})
+		ExpectJSON(map[string]string{"foo": "bar"})
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/problem"
 )
 
 type MyInput struct {
@@ -87,7 +88,7 @@ func TestRegister_Error(t *testing.T) {
 		t.Errorf("expected 422 Unprocessable Entity for coercion error, got %d", rr.Code)
 	}
 
-	var prob aku.Problem
+	var prob problem.Details
 	if err := json.Unmarshal(rr.Body.Bytes(), &prob); err != nil {
 		t.Fatalf("failed to unmarshal problem: %v", err)
 	}

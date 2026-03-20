@@ -7,12 +7,13 @@ import (
 
 	"github.com/nijaru/aku"
 	"github.com/nijaru/aku/internal/testutil"
+	"github.com/nijaru/aku/middleware"
 )
 
 func TestMiddleware_Limit(t *testing.T) {
 	app := aku.New()
 	// Allow 1 request per second, with burst of 1
-	app.Use(aku.Limit(1, 1))
+	app.Use(middleware.Limit(1, 1))
 
 	aku.Get(app, "/limited", func(ctx context.Context, _ struct{}) (string, error) {
 		return "ok", nil
