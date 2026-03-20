@@ -1,0 +1,32 @@
+# This is an idiomatic GoReleaser config for a library.
+# It doesn't build binaries (since it's a lib), but it handles
+# changelogs and GitHub Releases.
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - skip: true # Skip binary builds for a library
+
+archives:
+  - skip: true # Skip archives for a library
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - 'Merge pull request'
+      - 'Merge branch'
+
+release:
+  github:
+    owner: nijaru
+    name: aku
+  draft: false
+  prerelease: auto
+  name_template: "{{.Tag}}"
