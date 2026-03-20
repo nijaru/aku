@@ -45,6 +45,8 @@ type PathItem map[string]*Operation
 type Operation struct {
 	Summary     string                `json:"summary,omitempty"`
 	Description string                `json:"description,omitempty"`
+	OperationID string                `json:"operationId,omitempty"`
+	Deprecated  bool                  `json:"deprecated,omitempty"`
 	Tags        []string              `json:"tags,omitempty"`
 	Parameters  []Parameter           `json:"parameters,omitempty"`
 	RequestBody *RequestBody          `json:"requestBody,omitempty"`
@@ -103,6 +105,9 @@ type Route interface {
 	GetStatus() int
 	GetSummary() string
 	GetDescription() string
+	GetOperationID() string
+	GetDeprecated() bool
+	GetInternal() bool
 	GetTags() []string
 	GetSchema() *bind.Schema
 	GetOutputType() reflect.Type
@@ -127,6 +132,10 @@ func Generate(title, version string, routes []Route, securitySchemes map[string]
 	}
 
 	for _, r := range routes {
+		if r.GetInternal() {
+			continue
+		}
+
 		pattern := r.GetPattern()
 		if _, ok := g.doc.Paths[pattern]; !ok {
 			g.doc.Paths[pattern] = make(PathItem)
@@ -135,6 +144,8 @@ func Generate(title, version string, routes []Route, securitySchemes map[string]
 		op := &Operation{
 			Summary:     r.GetSummary(),
 			Description: r.GetDescription(),
+			OperationID: r.GetOperationID(),
+			Deprecated:  r.GetDeprecated(),
 			Tags:        r.GetTags(),
 			Responses:   make(map[string]Response),
 			Security:    r.GetSecurity(),

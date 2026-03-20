@@ -46,7 +46,7 @@ func WithMaxMultipartMemory(max int64) Option {
 }
 
 // WithStrictQuery enables strict mode for query parameters.
-// If enabled, requests with unknown query parameters will return a 400 Bad Request.
+// If enabled, requests with unknown query parameters will return a 422 Unprocessable Entity.
 func WithStrictQuery() Option {
 	return func(a *App) {
 		if a.bindConfig == nil {
@@ -57,12 +57,111 @@ func WithStrictQuery() Option {
 }
 
 // WithStrictHeader enables strict mode for header parameters.
-// If enabled, requests with unknown header parameters will return a 400 Bad Request.
+// If enabled, requests with unknown header parameters will return a 422 Unprocessable Entity.
 func WithStrictHeader() Option {
 	return func(a *App) {
 		if a.bindConfig == nil {
 			a.bindConfig = &bind.Config{}
 		}
 		a.bindConfig.StrictHeader = true
+	}
+}
+
+// RouteOption configures a specific route at registration time.
+type RouteOption func(*routeMeta)
+
+type routeMeta struct {
+	status      int
+	summary     string
+	description string
+	operationID string
+	deprecated  bool
+	internal    bool
+	tags        []string
+	security    []map[string][]string
+	middleware  []func(http.Handler) http.Handler
+	schema      *bind.Schema
+}
+
+func defaultRouteMeta() routeMeta {
+	return routeMeta{
+		status: http.StatusOK,
+	}
+}
+
+// WithStatus overrides the success HTTP status code for a route.
+func WithStatus(code int) RouteOption {
+	return func(m *routeMeta) {
+		m.status = code
+	}
+}
+
+// WithSummary sets the summary for a route.
+func WithSummary(s string) RouteOption {
+	return func(m *routeMeta) {
+		m.summary = s
+	}
+}
+
+// WithDescription sets the description for a route.
+func WithDescription(s string) RouteOption {
+	return func(m *routeMeta) {
+		m.description = s
+	}
+}
+
+// WithOperationID sets the OpenAPI operation ID for a route.
+func WithOperationID(id string) RouteOption {
+	return func(m *routeMeta) {
+		m.operationID = id
+	}
+}
+
+// WithDeprecated marks the route as deprecated in OpenAPI.
+func WithDeprecated() RouteOption {
+	return func(m *routeMeta) {
+		m.deprecated = true
+	}
+}
+
+// WithInternal marks the route as internal, hiding it from OpenAPI.
+func WithInternal() RouteOption {
+	return func(m *routeMeta) {
+		m.internal = true
+	}
+}
+
+// WithTags adds OpenAPI tags to a route.
+func WithTags(tags ...string) RouteOption {
+	return func(m *routeMeta) {
+		m.tags = append(m.tags, tags...)
+	}
+}
+
+// WithTag adds a single OpenAPI tag to a route.
+func WithTag(tag string) RouteOption {
+	return func(m *routeMeta) {
+		m.tags = append(m.tags, tag)
+	}
+}
+
+// WithSecurity adds OpenAPI security requirements to a route.
+func WithSecurity(security ...map[string][]string) RouteOption {
+	return func(m *routeMeta) {
+		m.security = append(m.security, security...)
+	}
+}
+
+// WithSecurityName adds a simple security requirement by name with no scopes.
+func WithSecurityName(name string) RouteOption {
+	return func(m *routeMeta) {
+		m.security = append(m.security, map[string][]string{name: {}})
+	}
+}
+
+// WithMiddleware adds route-local middleware.
+func WithMiddleware(mw ...func(http.Handler) http.Handler) RouteOption {
+	return func(m *routeMeta) {
+		m.middleware = append(m.middleware, mw...)
 	}
 }

@@ -28,82 +28,6 @@ type Router interface {
 	StaticFS(prefix string, fs http.FileSystem)
 }
 
-// RouteOption configures a specific route at registration time.
-type RouteOption func(*routeMeta)
-
-type routeMeta struct {
-	status      int
-	summary     string
-	description string
-	tags        []string
-	security    []map[string][]string
-	middleware  []func(http.Handler) http.Handler
-	schema      *bind.Schema
-}
-
-func defaultRouteMeta() routeMeta {
-	return routeMeta{
-		status: http.StatusOK,
-	}
-}
-
-// WithStatus overrides the success HTTP status code for a route.
-func WithStatus(code int) RouteOption {
-	return func(m *routeMeta) {
-		m.status = code
-	}
-}
-
-// WithMiddleware adds route-local middleware to the handler.
-func WithMiddleware(mw ...func(http.Handler) http.Handler) RouteOption {
-	return func(m *routeMeta) {
-		m.middleware = append(m.middleware, mw...)
-	}
-}
-
-// WithSummary sets a summary for the route, used in OpenAPI generation.
-func WithSummary(summary string) RouteOption {
-	return func(m *routeMeta) {
-		m.summary = summary
-	}
-}
-
-// WithDescription sets a detailed description for the route, used in OpenAPI generation.
-func WithDescription(description string) RouteOption {
-	return func(m *routeMeta) {
-		m.description = description
-	}
-}
-
-// WithTags adds tags to the route, used for grouping in OpenAPI generation.
-func WithTags(tags ...string) RouteOption {
-	return func(m *routeMeta) {
-		m.tags = append(m.tags, tags...)
-	}
-}
-
-// WithTag adds a single tag to the route.
-func WithTag(tag string) RouteOption {
-	return func(m *routeMeta) {
-		m.tags = append(m.tags, tag)
-	}
-}
-
-// WithSecurity adds security requirements to the route.
-// Example: WithSecurity(map[string][]string{"BearerAuth": {}})
-func WithSecurity(security ...map[string][]string) RouteOption {
-	return func(m *routeMeta) {
-		m.security = append(m.security, security...)
-	}
-}
-
-// WithSecurityName adds a simple security requirement by name with no scopes.
-func WithSecurityName(name string) RouteOption {
-	return func(m *routeMeta) {
-		m.security = append(m.security, map[string][]string{name: {}})
-	}
-}
-
 // Get registers a new GET route on the router.
 func Get[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
 	return register(r, http.MethodGet, pattern, handler, opts...)
@@ -287,6 +211,9 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 		Status:      meta.status,
 		Summary:     meta.summary,
 		Description: meta.description,
+		OperationID: meta.operationID,
+		Deprecated:  meta.deprecated,
+		Internal:    meta.internal,
 		Tags:        meta.tags,
 		Security:    meta.security,
 		Schema:      schema,
