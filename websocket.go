@@ -48,6 +48,9 @@ func WS[In any, Msg any](r Router, pattern string, handler WebsocketHandler[In, 
 	extractor, schema := bind.Compiler[In]()
 	meta.schema = schema
 
+	// Extract custom messages from the input struct (Query, Path, etc.)
+	customMessages := bind.GetCustomMessages(reflect.TypeOf((*In)(nil)).Elem())
+
 	for _, opt := range opts {
 		opt(&meta)
 	}
@@ -92,7 +95,7 @@ func WS[In any, Msg any](r Router, pattern string, handler WebsocketHandler[In, 
 		if app.validator != nil {
 			if err := app.validator.Struct(in); err != nil {
 				if vErr, ok := errors.AsType[validator.ValidationErrors](err); ok {
-					handleError(app, w, r, problem.ValidationProblem("Handshake validation failed", problem.FromValidationErrors(vErr)))
+					handleError(app, w, r, problem.ValidationProblem("Handshake validation failed", problem.FromValidationErrors(vErr, customMessages)))
 				} else {
 					handleError(app, w, r, problem.BadRequest(err.Error()))
 				}

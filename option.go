@@ -2,8 +2,11 @@ package aku
 
 import (
 	"net/http"
+	"reflect"
+	"strings"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/nijaru/aku/internal/bind"
 )
 
@@ -21,6 +24,20 @@ func WithGlobalMiddleware(mw ...func(http.Handler) http.Handler) Option {
 func WithValidator(v Validator) Option {
 	return func(a *App) {
 		a.validator = v
+
+		// If it's the standard go-playground validator, we can make it aware of our tags
+		if gpv, ok := v.(*validator.Validate); ok {
+			gpv.RegisterTagNameFunc(func(fld reflect.StructField) string {
+				// Try JSON first, then Query, then Header, then Path, then Form
+				for _, tag := range []string{"json", "query", "header", "path", "form"} {
+					name := strings.Split(fld.Tag.Get(tag), ",")[0]
+					if name != "" && name != "-" {
+						return name
+					}
+				}
+				return fld.Name
+			})
+		}
 	}
 }
 

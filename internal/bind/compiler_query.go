@@ -136,7 +136,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 						f.Set(slice)
 					}
 				} else if isRequired {
-					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("missing required parameter")}
+					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("is required")}
 				}
 				return nil
 			})
@@ -166,7 +166,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 				if found {
 					v.Field(fieldIdx).Set(m)
 				} else if isRequired {
-					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("missing required parameter")}
+					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("is required")}
 				}
 				return nil
 			})
@@ -185,7 +185,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 						}
 					}
 				} else if isRequired {
-					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("missing required parameter")}
+					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("is required")}
 				}
 				return nil
 			})
@@ -197,6 +197,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 			Type:     field.Type,
 			Required: field.Type.Kind() != reflect.Pointer,
 			Validate: field.Tag.Get("validate"),
+			Message:  field.Tag.Get("msg"),
 			Example:  field.Tag.Get("example"),
 		})
 	}

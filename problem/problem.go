@@ -3,6 +3,7 @@ package problem
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -99,13 +100,18 @@ func Problemf(status int, title, format string, args ...any) *Details {
 }
 
 // FromValidationErrors converts validator.ValidationErrors to a slice of InvalidParam.
-func FromValidationErrors(errs validator.ValidationErrors) []InvalidParam {
+func FromValidationErrors(errs validator.ValidationErrors, customMessages map[string]string) []InvalidParam {
 	params := make([]InvalidParam, len(errs))
 	for i, err := range errs {
 		params[i] = InvalidParam{
-			Name:   err.Field(),
-			Reason: err.Tag(),
+			Name: err.Field(),
 		}
+
+		if msg, ok := customMessages[err.Field()]; ok {
+			params[i].Reason = msg
+			continue
+		}
+
 		// Try to provide a more descriptive reason for common tags
 		switch err.Tag() {
 		case "required":
@@ -113,9 +119,20 @@ func FromValidationErrors(errs validator.ValidationErrors) []InvalidParam {
 		case "email":
 			params[i].Reason = "must be a valid email address"
 		case "min":
-			params[i].Reason = fmt.Sprintf("must be at least %s", err.Param())
+			if err.Kind() == reflect.String {
+				params[i].Reason = fmt.Sprintf("must be at least %s characters", err.Param())
+			} else {
+				params[i].Reason = fmt.Sprintf("must be at least %s", err.Param())
+			}
 		case "max":
-			params[i].Reason = fmt.Sprintf("must be at most %s", err.Param())
+			if err.Kind() == reflect.String {
+				params[i].Reason = fmt.Sprintf("must be at most %s characters", err.Param())
+			} else {
+				params[i].Reason = fmt.Sprintf("must be at most %s", err.Param())
+			}
+		default:
+			// If it's a known tag, we can use it, otherwise use actual error message if possible
+			params[i].Reason = fmt.Sprintf("failed on '%s' tag", err.Tag())
 		}
 	}
 	return params

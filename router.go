@@ -69,6 +69,9 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 	extractor, schema := bind.Compiler[In]()
 	meta.schema = schema
 
+	// Extract custom messages from the input struct (Query, Path, Body, etc.)
+	customMessages := bind.GetCustomMessages(reflect.TypeOf((*In)(nil)).Elem())
+
 	for _, opt := range opts {
 		opt(&meta)
 	}
@@ -131,7 +134,7 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 		if app.validator != nil {
 			if err := app.validator.Struct(in); err != nil {
 				if vErr, ok := errors.AsType[validator.ValidationErrors](err); ok {
-					handleError(app, w, r, problem.ValidationProblem("Input validation failed", problem.FromValidationErrors(vErr)))
+					handleError(app, w, r, problem.ValidationProblem("Input validation failed", problem.FromValidationErrors(vErr, customMessages)))
 				} else {
 					handleError(app, w, r, problem.BadRequest(err.Error()))
 				}

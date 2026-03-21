@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 // Config holds configuration for the binder extractors.
@@ -34,6 +35,7 @@ type Parameter struct {
 	Type     reflect.Type
 	Required bool
 	Validate string
+	Message  string
 	Example  string
 }
 
@@ -124,4 +126,48 @@ func Compiler[T any]() (Extractor[T], *Schema) {
 		}
 		return nil
 	}, schema
+}
+
+// GetCustomMessages extracts the 'msg' tag from all fields of a struct and its sub-structs.
+// It maps the tag name (e.g. from query, json, etc.) to the custom error message.
+func GetCustomMessages(typ reflect.Type) map[string]string {
+	if typ == nil {
+		return nil
+	}
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Kind() != reflect.Struct {
+		return nil
+	}
+
+	msgs := make(map[string]string)
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+
+		// Recurse into common Aku sections
+		switch field.Name {
+		case "Path", "Query", "Header", "Form", "Body":
+			for k, v := range GetCustomMessages(field.Type) {
+				msgs[k] = v
+			}
+			continue
+		}
+
+		msg := field.Tag.Get("msg")
+		if msg == "" {
+			continue
+		}
+
+		name := field.Name
+		// Check tags in priority order
+		for _, tag := range []string{"json", "query", "header", "path", "form"} {
+			if t := field.Tag.Get(tag); t != "" {
+				name = strings.Split(t, ",")[0]
+				break
+			}
+		}
+		msgs[name] = msg
+	}
+	return msgs
 }

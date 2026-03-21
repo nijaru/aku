@@ -158,6 +158,19 @@ func (r *Response) ExpectJSON(expected any) *Response {
 	return r
 }
 
+// ExpectJSONFunc unmarshals the response body into a map and calls fn with it.
+func (r *Response) ExpectJSONFunc(fn func(map[string]any) error) *Response {
+	r.tester.t.Helper()
+	var actual map[string]any
+	if err := json.Unmarshal(r.resp.Body.Bytes(), &actual); err != nil {
+		r.tester.t.Fatalf("failed to unmarshal response body: %v\nBody: %s", err, r.resp.Body.String())
+	}
+	if err := fn(actual); err != nil {
+		r.tester.t.Errorf("ExpectJSONFunc failed: %v", err)
+	}
+	return r
+}
+
 // ExpectHeader asserts that the response header matches expected.
 func (r *Response) ExpectHeader(key, expected string) *Response {
 	r.tester.t.Helper()

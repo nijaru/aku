@@ -54,9 +54,11 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 			Type:     field.Type,
 			Required: field.Type.Kind() != reflect.Pointer,
 			Validate: field.Tag.Get("validate"),
+			Message:  field.Tag.Get("msg"),
 			Example:  field.Tag.Get("example"),
 		})
-	}
+		}
+
 
 	return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
 		// Ensure form is parsed.
