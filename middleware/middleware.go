@@ -296,6 +296,151 @@ func (w *brotliResponseWriter) Flush() {
 	}
 }
 
+// SecurityHeadersOptions configures the SecurityHeaders middleware.
+// All fields are optional; zero-value headers are omitted.
+type SecurityHeadersOptions struct {
+	// ContentSecurityPolicy sets the Content-Security-Policy header.
+	// Default: "default-src 'self'; object-src 'none'; base-uri 'none'"
+	ContentSecurityPolicy string
+
+	// HSTSMaxAge sets the max-age for Strict-Transport-Security in seconds.
+	// Set to negative to disable HSTS. Default: 63072000 (2 years, per OWASP).
+	HSTSMaxAge int
+
+	// HSTSIncludeSubDomains adds includeSubDomains to the HSTS directive.
+	HSTSIncludeSubDomains bool
+
+	// HSTSPreload adds preload to the HSTS directive.
+	// WARNING: Once submitted to the HSTS preload list, removal takes months.
+	HSTSPreload bool
+
+	// XFrameOptions sets X-Frame-Options. Default: "DENY".
+	// Valid values: "DENY", "SAMEORIGIN", "" (disabled).
+	XFrameOptions string
+
+	// ReferrerPolicy sets the Referrer-Policy header.
+	// Default: "strict-origin-when-cross-origin".
+	ReferrerPolicy string
+
+	// PermissionsPolicy sets the Permissions-Policy header.
+	// Default disables camera, microphone, geolocation, payment, USB, and FLoC.
+	PermissionsPolicy string
+
+	// CrossOriginEmbedderPolicy sets Cross-Origin-Embedder-Policy.
+	// Default: "" (not set). Set to "require-corp" only if you need SharedArrayBuffer.
+	CrossOriginEmbedderPolicy string
+
+	// CrossOriginOpenerPolicy sets Cross-Origin-Opener-Policy.
+	// Default: "same-origin".
+	CrossOriginOpenerPolicy string
+
+	// CrossOriginResourcePolicy sets Cross-Origin-Resource-Policy.
+	// Default: "same-origin".
+	CrossOriginResourcePolicy string
+
+	// XXSSProtection sets the X-XSS-Protection header.
+	// OWASP recommends "0" (disable the legacy XSS auditor, which itself had vulns).
+	// Default: "0".
+	XXSSProtection string
+}
+
+// SecurityHeaders returns a middleware that sets common security headers.
+// It applies sensible defaults that can be overridden via SecurityHeadersOptions.
+func SecurityHeaders(opts ...SecurityHeadersOptions) func(http.Handler) http.Handler {
+	cfg := SecurityHeadersOptions{
+		ContentSecurityPolicy:     "default-src 'self'; object-src 'none'; base-uri 'none'",
+		HSTSMaxAge:                63072000,
+		XFrameOptions:             "DENY",
+		ReferrerPolicy:            "strict-origin-when-cross-origin",
+		PermissionsPolicy:         "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()",
+		CrossOriginOpenerPolicy:   "same-origin",
+		CrossOriginResourcePolicy: "same-origin",
+		XXSSProtection:            "0",
+	}
+
+	if len(opts) > 0 {
+		o := opts[0]
+		if o.ContentSecurityPolicy != "" {
+			cfg.ContentSecurityPolicy = o.ContentSecurityPolicy
+		}
+		if o.HSTSMaxAge != 0 {
+			cfg.HSTSMaxAge = o.HSTSMaxAge
+		}
+		if o.XFrameOptions != "" {
+			cfg.XFrameOptions = o.XFrameOptions
+		}
+		if o.ReferrerPolicy != "" {
+			cfg.ReferrerPolicy = o.ReferrerPolicy
+		}
+		if o.PermissionsPolicy != "" {
+			cfg.PermissionsPolicy = o.PermissionsPolicy
+		}
+		if o.CrossOriginEmbedderPolicy != "" {
+			cfg.CrossOriginEmbedderPolicy = o.CrossOriginEmbedderPolicy
+		}
+		if o.CrossOriginOpenerPolicy != "" {
+			cfg.CrossOriginOpenerPolicy = o.CrossOriginOpenerPolicy
+		}
+		if o.CrossOriginResourcePolicy != "" {
+			cfg.CrossOriginResourcePolicy = o.CrossOriginResourcePolicy
+		}
+		if o.XXSSProtection != "" {
+			cfg.XXSSProtection = o.XXSSProtection
+		}
+		cfg.HSTSIncludeSubDomains = o.HSTSIncludeSubDomains
+		cfg.HSTSPreload = o.HSTSPreload
+	}
+
+	// Pre-compute the HSTS value since it doesn't change per-request.
+	hsts := ""
+	if cfg.HSTSMaxAge > 0 {
+		hsts = "max-age=" + strconv.Itoa(cfg.HSTSMaxAge)
+		if cfg.HSTSIncludeSubDomains {
+			hsts += "; includeSubDomains"
+		}
+		if cfg.HSTSPreload {
+			hsts += "; preload"
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+
+			if cfg.ContentSecurityPolicy != "" {
+				h.Set("Content-Security-Policy", cfg.ContentSecurityPolicy)
+			}
+			if hsts != "" {
+				h.Set("Strict-Transport-Security", hsts)
+			}
+			if cfg.XFrameOptions != "" {
+				h.Set("X-Frame-Options", cfg.XFrameOptions)
+			}
+			h.Set("X-Content-Type-Options", "nosniff")
+			if cfg.ReferrerPolicy != "" {
+				h.Set("Referrer-Policy", cfg.ReferrerPolicy)
+			}
+			if cfg.PermissionsPolicy != "" {
+				h.Set("Permissions-Policy", cfg.PermissionsPolicy)
+			}
+			if cfg.CrossOriginEmbedderPolicy != "" {
+				h.Set("Cross-Origin-Embedder-Policy", cfg.CrossOriginEmbedderPolicy)
+			}
+			if cfg.CrossOriginOpenerPolicy != "" {
+				h.Set("Cross-Origin-Opener-Policy", cfg.CrossOriginOpenerPolicy)
+			}
+			if cfg.CrossOriginResourcePolicy != "" {
+				h.Set("Cross-Origin-Resource-Policy", cfg.CrossOriginResourcePolicy)
+			}
+			if cfg.XXSSProtection != "" {
+				h.Set("X-XSS-Protection", cfg.XXSSProtection)
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func isCompressible(ct string) bool {
 	if ct == "" {
 		return true // Assume compressible if unknown (e.g. first write)
