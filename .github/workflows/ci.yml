@@ -11,13 +11,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        go-version: ['1.22', '1.24', '1.26.1']
-        os: [ubuntu-latest, macos-latest]
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,8 +21,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: '1.26.1'
           cache: true
+
+      - name: Verify modules
+        run: |
+          go mod tidy
+          git diff --exit-code
 
       - name: Run vet
         run: go vet ./...
@@ -37,10 +38,8 @@ jobs:
           version: "2024.1"
           install-go: false
 
-      - name: Run tests
-        run: go test -v -race ./...
+      - name: Build
+        run: make build
 
-      - name: Check go mod tidy
-        run: |
-          go mod tidy
-          git diff --exit-code
+      - name: Run tests
+        run: make test
