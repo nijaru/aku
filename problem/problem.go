@@ -1,12 +1,10 @@
 package problem
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/nijaru/aku/internal/render"
 )
 
 // InvalidParam represents a detailed validation or parsing failure for a single input parameter.
@@ -116,14 +114,4 @@ func FromValidationErrors(errs validator.ValidationErrors) []InvalidParam {
 		}
 	}
 	return params
-}
-
-func defaultErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	prob, ok := errors.AsType[*Details](err)
-	if !ok {
-		// Wrap unexpected application errors into a 500 Internal Server Error problem.
-		prob = Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error())
-	}
-
-	render.Problem(w, prob.Status, prob)
 }

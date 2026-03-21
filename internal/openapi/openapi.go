@@ -296,9 +296,7 @@ func (g *generator) reflectToSchema(t reflect.Type) Schema {
 		if pkg := t.PkgPath(); pkg != "" {
 			// Clean up test package suffixes (e.g., github.com/nijaru/aku/tests_test -> github.com/nijaru/aku)
 			pkg = strings.TrimSuffix(pkg, "_test")
-			if strings.HasSuffix(pkg, "/tests") {
-				pkg = strings.TrimSuffix(pkg, "/tests")
-			}
+			pkg = strings.TrimSuffix(pkg, "/tests")
 			key = strings.ReplaceAll(pkg, "/", ".") + "." + name
 		}
 
@@ -398,9 +396,7 @@ func (g *generator) buildStructSchema(t reflect.Type) Schema {
 			for k, v := range embedded.Properties {
 				s.Properties[k] = v
 			}
-			for _, req := range embedded.Required {
-				s.Required = append(s.Required, req)
-			}
+			s.Required = append(s.Required, embedded.Required...)
 			continue
 		}
 

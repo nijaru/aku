@@ -125,10 +125,3 @@ func Compiler[T any]() (Extractor[T], *Schema) {
 		return nil
 	}, schema
 }
-
-type fieldInfo struct {
-	idx     int
-	name    string
-	isSlice bool
-	isMap   bool
-}

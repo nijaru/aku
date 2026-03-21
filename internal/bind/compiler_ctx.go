@@ -103,7 +103,3 @@ func compileCtx(sectionIdx int, typ reflect.Type) (func(context.Context, *http.R
 
 	return extractor, params
 }
-
-func compileCtxFields(sectionIdx int, typ reflect.Type) (func(context.Context, *http.Request, reflect.Value, *Config) error, []Parameter) {
-	return compileCtx(sectionIdx, typ)
-}
