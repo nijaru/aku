@@ -98,6 +98,7 @@ type routeMeta struct {
 	security    []map[string][]string
 	middleware  []func(http.Handler) http.Handler
 	schema      *bind.Schema
+	spa         bool
 }
 
 func defaultRouteMeta() routeMeta {
@@ -180,5 +181,13 @@ func WithSecurityName(name string) RouteOption {
 func WithMiddleware(mw ...func(http.Handler) http.Handler) RouteOption {
 	return func(m *routeMeta) {
 		m.middleware = append(m.middleware, mw...)
+	}
+}
+
+// WithSPA enables single-page application mode for static file serving.
+// If enabled, 404s will fallback to index.html at the root of the static directory.
+func WithSPA() RouteOption {
+	return func(m *routeMeta) {
+		m.spa = true
 	}
 }
