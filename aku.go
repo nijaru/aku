@@ -25,6 +25,7 @@ type App struct {
 	MaxMultipartMemory int64
 	ShutdownTimeout    time.Duration
 	bindConfig         *bind.Config
+	errorObservers     []func(context.Context, error)
 }
 
 // New creates a new Aku application.
@@ -107,6 +108,12 @@ func (a *App) Routes() []*Route {
 // AddSecurityScheme adds a security scheme to the application.
 func (a *App) AddSecurityScheme(name string, scheme SecurityScheme) {
 	a.securitySchemes[name] = scheme
+}
+
+// AddErrorObserver adds an error observer to the application.
+// Error observers are called whenever an error is handled by the framework.
+func (a *App) AddErrorObserver(observer func(context.Context, error)) {
+	a.errorObservers = append(a.errorObservers, observer)
 }
 
 // ServeHTTP implements the standard library http.Handler interface.

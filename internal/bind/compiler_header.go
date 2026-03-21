@@ -58,7 +58,7 @@ func isStandardHeader(h string) bool {
 		"sec-ch-ua-platform", "sec-fetch-dest", "sec-fetch-mode",
 		"sec-fetch-site", "sec-fetch-user", "upgrade-insecure-requests",
 		"user-agent", "x-forwarded-for", "x-forwarded-host",
-		"x-forwarded-proto", "x-request-id", "traceparent",
+		"x-forwarded-proto", "x-request-id", "traceparent", "tracestate",
 	}
 	for _, s := range standard {
 		if h == s {

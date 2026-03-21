@@ -32,6 +32,11 @@ func (p *Details) Error() string {
 	return fmt.Sprintf("[%d] %s", p.Status, p.Title)
 }
 
+func (p *Details) GetStatus() int    { return p.Status }
+func (p *Details) GetTitle() string  { return p.Title }
+func (p *Details) GetType() string   { return p.Type }
+func (p *Details) GetDetail() string { return p.Detail }
+
 // BadRequest creates a generic 400 Bad Request problem.
 func BadRequest(detail string) *Details {
 	return &Details{

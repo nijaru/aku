@@ -229,6 +229,10 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 }
 
 func handleError(app *App, w http.ResponseWriter, r *http.Request, err error) {
+	for _, observer := range app.errorObservers {
+		observer(r.Context(), err)
+	}
+
 	if app.errorHandler != nil {
 		app.errorHandler(w, r, err)
 		return
