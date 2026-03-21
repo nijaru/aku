@@ -27,6 +27,7 @@ type Router interface {
 	Middleware() []func(http.Handler) http.Handler
 	Static(prefix, root string)
 	StaticFS(prefix string, fs http.FileSystem)
+	WS(pattern string, handler any, opts ...RouteOption) error
 }
 
 // Get registers a new GET route on the router.

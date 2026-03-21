@@ -1,8 +1,10 @@
 package aku
 
 import (
+	"bufio"
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -96,6 +98,15 @@ func (a *App) Metrics(pattern string, handler http.Handler, opts ...RouteOption)
 	a.HandleHTTP(http.MethodGet, pattern, handler, opts...)
 }
 
+// WS satisfies the Router interface for WebSockets.
+func (a *App) WS(pattern string, handler any, opts ...RouteOption) error {
+	// This will be called by registerWS which we can also define if we want a generic helper.
+	// But actually our WS[In, Msg] function is already generic and public.
+	// To satisfy the interface we need a non-generic method that takes `any`.
+	// This is slightly tricky with Go generics.
+	panic("use aku.WS(router, pattern, handler) instead")
+}
+
 func (a *App) App() *App                                     { return a }
 func (a *App) Prefix() string                                { return "" }
 func (a *App) Middleware() []func(http.Handler) http.Handler { return nil }
@@ -130,6 +141,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	iw.status = 0
 	iw.written = false
 	iw.intercepted = false
+	iw.hijacked = false
 	defer errorInterceptorPool.Put(iw)
 
 	var finalHandler http.Handler = a.mux
@@ -151,7 +163,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		handleError(a, w, r, prob)
 	} else if !iw.written && (iw.status == http.StatusNotFound || iw.status == http.StatusMethodNotAllowed) {
 		// A handler called WriteHeader(404) but no Write(), we must write the header.
-		w.WriteHeader(iw.status)
+		if !iw.hijacked {
+			w.WriteHeader(iw.status)
+		}
 	}
 }
 
@@ -160,10 +174,11 @@ type errorInterceptor struct {
 	status      int
 	written     bool
 	intercepted bool
+	hijacked    bool
 }
 
 func (i *errorInterceptor) WriteHeader(status int) {
-	if i.written {
+	if i.written || i.hijacked {
 		return
 	}
 	i.status = status
@@ -174,6 +189,9 @@ func (i *errorInterceptor) WriteHeader(status int) {
 }
 
 func (i *errorInterceptor) Write(b []byte) (int, error) {
+	if i.hijacked {
+		return 0, http.ErrHijacked
+	}
 	if !i.written {
 		i.written = true
 		if (i.status == http.StatusNotFound && string(b) == "404 page not found\n") ||
@@ -192,6 +210,15 @@ func (i *errorInterceptor) Write(b []byte) (int, error) {
 	}
 
 	return i.ResponseWriter.Write(b)
+}
+
+func (i *errorInterceptor) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := i.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	i.hijacked = true
+	return h.Hijack()
 }
 
 func (i *errorInterceptor) Unwrap() http.ResponseWriter {

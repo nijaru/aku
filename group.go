@@ -37,3 +37,8 @@ func (g *Group) Metrics(pattern string, handler http.Handler, opts ...RouteOptio
 func (g *Group) App() *App                                     { return g.app }
 func (g *Group) Prefix() string                                { return g.prefix }
 func (g *Group) Middleware() []func(http.Handler) http.Handler { return g.middleware }
+
+// WS satisfies the Router interface for WebSockets.
+func (g *Group) WS(pattern string, handler any, opts ...RouteOption) error {
+	panic("use aku.WS(router, pattern, handler) instead")
+}
