@@ -25,8 +25,8 @@ type Router interface {
 	App() *App
 	Prefix() string
 	Middleware() []func(http.Handler) http.Handler
-	Static(prefix, root string)
-	StaticFS(prefix string, fs http.FileSystem)
+	Static(prefix, root string, opts ...RouteOption)
+	StaticFS(prefix string, fs http.FileSystem, opts ...RouteOption)
 	WS(pattern string, handler any, opts ...RouteOption) error
 }
 
@@ -113,13 +113,17 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 		// 1. Extract and bind parameters.
 		if err := extractor(r.Context(), r, in, pooled.val, app.bindConfig); err != nil {
 			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
-				handleError(app, w, r, problem.ValidationProblem("Request extraction or validation failed", []problem.InvalidParam{
-					{
-						Name:   bindErr.Field,
-						In:     bindErr.Source,
-						Reason: bindErr.Err.Error(),
-					},
-				}))
+				if bindErr.Source == "auth" {
+					handleError(app, w, r, problem.Unauthorized(bindErr.Err.Error()))
+				} else {
+					handleError(app, w, r, problem.ValidationProblem("Request extraction or validation failed", []problem.InvalidParam{
+						{
+							Name:   bindErr.Field,
+							In:     bindErr.Source,
+							Reason: bindErr.Err.Error(),
+						},
+					}))
+				}
 			} else {
 				if prob, ok := errors.AsType[*problem.Details](err); ok {
 					handleError(app, w, r, prob)
@@ -224,6 +228,23 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 		Schema:      schema,
 		OutputType:  outType,
 		middleware:  append(append([]func(http.Handler) http.Handler{}, groupMW...), meta.middleware...),
+	}
+
+	// Auto-register security schemes from auth extraction.
+	for _, auth := range schema.Auth {
+		s := SecurityScheme{
+			Type:         auth.Type,
+			Description:  auth.Description,
+			Scheme:       auth.Scheme,
+			BearerFormat: auth.BearerFmt,
+			In:           auth.In,
+			Name:         auth.ParamName,
+		}
+		app.AddSecurityScheme(auth.Name, s)
+		// Auto-add security requirement if route doesn't already have one.
+		if len(route.Security) == 0 {
+			route.Security = append(route.Security, map[string][]string{auth.Name: {}})
+		}
 	}
 
 	// Register with the router.

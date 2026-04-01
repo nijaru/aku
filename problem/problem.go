@@ -79,6 +79,16 @@ func Forbidden(detail string) *Details {
 	}
 }
 
+// Unauthorized creates a generic 401 Unauthorized problem.
+func Unauthorized(detail string) *Details {
+	return &Details{
+		Type:   "about:blank",
+		Title:  "Unauthorized",
+		Status: http.StatusUnauthorized,
+		Detail: detail,
+	}
+}
+
 // TooManyRequests creates a generic 429 Too Many Requests problem.
 func TooManyRequests(detail string) *Details {
 	return &Details{

@@ -26,6 +26,19 @@ type internalExtractor func(context.Context, *http.Request, reflect.Value, *Conf
 type Schema struct {
 	Parameters []Parameter
 	Body       reflect.Type
+	Auth       []AuthScheme
+}
+
+// AuthScheme describes an authentication scheme for OpenAPI documentation
+type AuthScheme struct {
+	Name        string // e.g. "bearerAuth", "ApiKeyAuth"
+	Type        string // "http" | "apiKey"
+	Scheme      string // For http: "bearer"
+	In          string // For apiKey: "header" | "query"
+	ParamName   string // For apiKey: the header or query param name
+	BearerFmt   string // For http bearer: "JWT"
+	Required    bool
+	Description string
 }
 
 // Parameter describes a single input parameter from the path, query, or headers.
@@ -103,6 +116,10 @@ func Compiler[T any]() (Extractor[T], *Schema) {
 			ex, params := compileCtx(i, field.Type)
 			steps = append(steps, internalExtractor(ex))
 			schema.Parameters = append(schema.Parameters, params...)
+		case "Auth":
+			ex, auth := compileAuth(i, field.Type)
+			steps = append(steps, internalExtractor(ex))
+			schema.Auth = append(schema.Auth, auth...)
 		}
 	}
 
