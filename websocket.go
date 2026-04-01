@@ -40,7 +40,12 @@ func (ws *Websocket[Msg]) Close(code websocket.StatusCode, reason string) error 
 }
 
 // WS registers a typesafe websocket route on the application or group.
-func WS[In any, Msg any](r Router, pattern string, handler WebsocketHandler[In, Msg], opts ...RouteOption) error {
+func WS[In any, Msg any](
+	r Router,
+	pattern string,
+	handler WebsocketHandler[In, Msg],
+	opts ...RouteOption,
+) error {
 	app := r.App()
 	meta := defaultRouteMeta()
 
@@ -49,7 +54,7 @@ func WS[In any, Msg any](r Router, pattern string, handler WebsocketHandler[In, 
 	meta.schema = schema
 
 	// Extract custom messages from the input struct (Query, Path, etc.)
-	customMessages := bind.GetCustomMessages(reflect.TypeOf((*In)(nil)).Elem())
+	customMessages := bind.GetCustomMessages(reflect.TypeFor[In]())
 
 	for _, opt := range opts {
 		opt(&meta)
@@ -82,9 +87,14 @@ func WS[In any, Msg any](r Router, pattern string, handler WebsocketHandler[In, 
 		// 1. Extract and bind parameters from the handshake request.
 		if err := extractor(r.Context(), r, in, pooled.val, app.bindConfig); err != nil {
 			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
-				handleError(app, w, r, problem.ValidationProblem("Handshake extraction failed", []problem.InvalidParam{
-					{Name: bindErr.Field, In: bindErr.Source, Reason: bindErr.Err.Error()},
-				}))
+				handleError(
+					app,
+					w,
+					r,
+					problem.ValidationProblem("Handshake extraction failed", []problem.InvalidParam{
+						{Name: bindErr.Field, In: bindErr.Source, Reason: bindErr.Err.Error()},
+					}),
+				)
 			} else {
 				handleError(app, w, r, err)
 			}
@@ -95,7 +105,15 @@ func WS[In any, Msg any](r Router, pattern string, handler WebsocketHandler[In, 
 		if app.validator != nil {
 			if err := app.validator.Struct(in); err != nil {
 				if vErr, ok := errors.AsType[validator.ValidationErrors](err); ok {
-					handleError(app, w, r, problem.ValidationProblem("Handshake validation failed", problem.FromValidationErrors(vErr, customMessages)))
+					handleError(
+						app,
+						w,
+						r,
+						problem.ValidationProblem(
+							"Handshake validation failed",
+							problem.FromValidationErrors(vErr, customMessages),
+						),
+					)
 				} else {
 					handleError(app, w, r, problem.BadRequest(err.Error()))
 				}
@@ -142,7 +160,9 @@ func WS[In any, Msg any](r Router, pattern string, handler WebsocketHandler[In, 
 		Tags:        meta.tags,
 		Security:    meta.security,
 		Schema:      schema,
-		middleware:  append(append([]func(http.Handler) http.Handler{}, groupMW...), meta.middleware...),
+		middleware: append(
+			append([]func(http.Handler) http.Handler{}, groupMW...),
+			meta.middleware...),
 	}
 
 	r.Handle("GET", pattern, finalHandler, route)

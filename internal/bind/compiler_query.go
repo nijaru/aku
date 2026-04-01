@@ -35,7 +35,11 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 		if cfg.StrictQuery {
 			for k := range query {
 				if _, ok := consumed[k]; !ok {
-					return &BindError{Field: k, Source: "query", Err: fmt.Errorf("unknown parameter")}
+					return &BindError{
+						Field:  k,
+						Source: "query",
+						Err:    fmt.Errorf("unknown parameter"),
+					}
 				}
 			}
 		}
@@ -69,42 +73,47 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 
 		// Support recursion for structs that are not Custom Binders and do not implement TextUnmarshaler
 		isBinder := fTyp.Implements(binderType) || reflect.PointerTo(fTyp).Implements(binderType)
-		isText := fTyp.Implements(textUnmarshalerType) || reflect.PointerTo(fTyp).Implements(textUnmarshalerType)
+		isText := fTyp.Implements(textUnmarshalerType) ||
+			reflect.PointerTo(fTyp).Implements(textUnmarshalerType)
 
-		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !isBinder && !isText {
+		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeFor[time.Time]() && !isBinder &&
+			!isText {
 			subSteps, subParams := compileQueryLevel(fTyp, name)
 			subPrefix := name + "["
-			steps = append(steps, func(q url.Values, v reflect.Value, consumed map[string]struct{}) error {
-				// Only allocate/recurse if there's actually data for this struct
-				found := false
-				for k := range q {
-					if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
-						found = true
-						if consumed != nil {
-							// We don't mark individual keys here, sub-steps will do it
-						} else {
-							break
+			steps = append(
+				steps,
+				func(q url.Values, v reflect.Value, consumed map[string]struct{}) error {
+					// Only allocate/recurse if there's actually data for this struct
+					found := false
+					for k := range q {
+						if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
+							found = true
+							if consumed != nil {
+								// We don't mark individual keys here, sub-steps will do it
+							} else {
+								break
+							}
 						}
 					}
-				}
-				if !found {
-					return nil
-				}
+					if !found {
+						return nil
+					}
 
-				f := v.Field(i)
-				if f.Kind() == reflect.Pointer {
-					if f.IsNil() {
-						f.Set(reflect.New(f.Type().Elem()))
+					f := v.Field(i)
+					if f.Kind() == reflect.Pointer {
+						if f.IsNil() {
+							f.Set(reflect.New(f.Type().Elem()))
+						}
+						f = f.Elem()
 					}
-					f = f.Elem()
-				}
-				for _, subStep := range subSteps {
-					if err := subStep(q, f, consumed); err != nil {
-						return err
+					for _, subStep := range subSteps {
+						if err := subStep(q, f, consumed); err != nil {
+							return err
+						}
 					}
-				}
-				return nil
-			})
+					return nil
+				},
+			)
 			params = append(params, subParams...)
 			continue
 		}
@@ -119,27 +128,30 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 		if isSlice {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			sliceTyp := field.Type
-			steps = append(steps, func(query url.Values, v reflect.Value, consumed map[string]struct{}) error {
-				vals, ok := query[fieldName]
-				if ok {
-					if consumed != nil {
-						consumed[fieldName] = struct{}{}
-					}
-					if len(vals) > 0 {
-						f := v.Field(fieldIdx)
-						slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
-						for i, val := range vals {
-							if err := elemCoercer(val, slice.Index(i)); err != nil {
-								return &BindError{Field: fieldName, Source: "query", Err: err}
-							}
+			steps = append(
+				steps,
+				func(query url.Values, v reflect.Value, consumed map[string]struct{}) error {
+					vals, ok := query[fieldName]
+					if ok {
+						if consumed != nil {
+							consumed[fieldName] = struct{}{}
 						}
-						f.Set(slice)
+						if len(vals) > 0 {
+							f := v.Field(fieldIdx)
+							slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
+							for i, val := range vals {
+								if err := elemCoercer(val, slice.Index(i)); err != nil {
+									return &BindError{Field: fieldName, Source: "query", Err: err}
+								}
+							}
+							f.Set(slice)
+						}
+					} else if isRequired {
+						return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("is required")}
 					}
-				} else if isRequired {
-					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("is required")}
-				}
-				return nil
-			})
+					return nil
+				},
+			)
 		} else if isMap {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			mapTyp := field.Type

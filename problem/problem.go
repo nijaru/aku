@@ -110,7 +110,10 @@ func Problemf(status int, title, format string, args ...any) *Details {
 }
 
 // FromValidationErrors converts validator.ValidationErrors to a slice of InvalidParam.
-func FromValidationErrors(errs validator.ValidationErrors, customMessages map[string]string) []InvalidParam {
+func FromValidationErrors(
+	errs validator.ValidationErrors,
+	customMessages map[string]string,
+) []InvalidParam {
 	params := make([]InvalidParam, len(errs))
 	for i, err := range errs {
 		params[i] = InvalidParam{

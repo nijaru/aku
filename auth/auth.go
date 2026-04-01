@@ -37,7 +37,11 @@ func RequireBearer() func(http.Handler) http.Handler {
 			if len(auth) < 7 || auth[:7] != "Bearer " || auth[7:] == "" {
 				w.Header().Set("Content-Type", "application/problem+json")
 				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"type":"about:blank","title":"Unauthorized","status":401,"detail":"Missing or invalid bearer token"}`))
+				_, _ = w.Write(
+					[]byte(
+						`{"type":"about:blank","title":"Unauthorized","status":401,"detail":"Missing or invalid bearer token"}`,
+					),
+				)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -54,7 +58,11 @@ func RequireAPIKey(headerName string) func(http.Handler) http.Handler {
 			if r.Header.Get(headerName) == "" {
 				w.Header().Set("Content-Type", "application/problem+json")
 				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"type":"about:blank","title":"Unauthorized","status":401,"detail":"Missing API key"}`))
+				_, _ = w.Write(
+					[]byte(
+						`{"type":"about:blank","title":"Unauthorized","status":401,"detail":"Missing API key"}`,
+					),
+				)
 				return
 			}
 			next.ServeHTTP(w, r)

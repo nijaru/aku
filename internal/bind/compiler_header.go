@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 )
@@ -39,7 +40,11 @@ func compileHeader(sectionIdx int, typ reflect.Type) (internalExtractor, []Param
 				}
 
 				if _, ok := consumed[k]; !ok {
-					return &BindError{Field: k, Source: "header", Err: fmt.Errorf("unknown parameter")}
+					return &BindError{
+						Field:  k,
+						Source: "header",
+						Err:    fmt.Errorf("unknown parameter"),
+					}
 				}
 			}
 		}
@@ -60,12 +65,7 @@ func isStandardHeader(h string) bool {
 		"user-agent", "x-forwarded-for", "x-forwarded-host",
 		"x-forwarded-proto", "x-request-id", "traceparent", "tracestate",
 	}
-	for _, s := range standard {
-		if h == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(standard, h)
 }
 
 type headerStep func(http.Header, reflect.Value, map[string]struct{}) error
@@ -93,42 +93,47 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 
 		// Support recursion for structs that are not Custom Binders and do not implement TextUnmarshaler
 		isBinder := fTyp.Implements(binderType) || reflect.PointerTo(fTyp).Implements(binderType)
-		isText := fTyp.Implements(textUnmarshalerType) || reflect.PointerTo(fTyp).Implements(textUnmarshalerType)
+		isText := fTyp.Implements(textUnmarshalerType) ||
+			reflect.PointerTo(fTyp).Implements(textUnmarshalerType)
 
-		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeOf(time.Time{}) && !isBinder && !isText {
+		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeFor[time.Time]() && !isBinder &&
+			!isText {
 			subSteps, subParams := compileHeaderLevel(fTyp, name)
 			subPrefix := name + "["
-			steps = append(steps, func(h http.Header, v reflect.Value, consumed map[string]struct{}) error {
-				// Only allocate/recurse if there's actually data for this struct
-				found := false
-				for k := range h {
-					if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
-						found = true
-						if consumed != nil {
-							// Sub-steps will mark individual keys
-						} else {
-							break
+			steps = append(
+				steps,
+				func(h http.Header, v reflect.Value, consumed map[string]struct{}) error {
+					// Only allocate/recurse if there's actually data for this struct
+					found := false
+					for k := range h {
+						if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
+							found = true
+							if consumed != nil {
+								// Sub-steps will mark individual keys
+							} else {
+								break
+							}
 						}
 					}
-				}
-				if !found {
-					return nil
-				}
+					if !found {
+						return nil
+					}
 
-				f := v.Field(i)
-				if f.Kind() == reflect.Pointer {
-					if f.IsNil() {
-						f.Set(reflect.New(f.Type().Elem()))
+					f := v.Field(i)
+					if f.Kind() == reflect.Pointer {
+						if f.IsNil() {
+							f.Set(reflect.New(f.Type().Elem()))
+						}
+						f = f.Elem()
 					}
-					f = f.Elem()
-				}
-				for _, subStep := range subSteps {
-					if err := subStep(h, f, consumed); err != nil {
-						return err
+					for _, subStep := range subSteps {
+						if err := subStep(h, f, consumed); err != nil {
+							return err
+						}
 					}
-				}
-				return nil
-			})
+					return nil
+				},
+			)
 			params = append(params, subParams...)
 			continue
 		}
@@ -141,25 +146,28 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 		if isSlice {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			sliceTyp := field.Type
-			steps = append(steps, func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
-				vals, ok := header[fieldName]
-				if ok {
-					if consumed != nil {
-						consumed[http.CanonicalHeaderKey(fieldName)] = struct{}{}
-					}
-					if len(vals) > 0 {
-						f := v.Field(fieldIdx)
-						slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
-						for i, val := range vals {
-							if err := elemCoercer(val, slice.Index(i)); err != nil {
-								return &BindError{Field: fieldName, Source: "header", Err: err}
-							}
+			steps = append(
+				steps,
+				func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
+					vals, ok := header[fieldName]
+					if ok {
+						if consumed != nil {
+							consumed[http.CanonicalHeaderKey(fieldName)] = struct{}{}
 						}
-						f.Set(slice)
+						if len(vals) > 0 {
+							f := v.Field(fieldIdx)
+							slice := reflect.MakeSlice(sliceTyp, len(vals), len(vals))
+							for i, val := range vals {
+								if err := elemCoercer(val, slice.Index(i)); err != nil {
+									return &BindError{Field: fieldName, Source: "header", Err: err}
+								}
+							}
+							f.Set(slice)
+						}
 					}
-				}
-				return nil
-			})
+					return nil
+				},
+			)
 		} else if isMap {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			mapTyp := field.Type

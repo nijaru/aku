@@ -98,7 +98,9 @@ func TestContextEnforcement(t *testing.T) {
 	t.Run("type mismatch", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/required", nil)
 		// Inject a string instead of *User
-		req = req.WithContext(context.WithValue(req.Context(), aku.ContextKey("user"), "not-a-user"))
+		req = req.WithContext(
+			context.WithValue(req.Context(), aku.ContextKey("user"), "not-a-user"),
+		)
 		w := httptest.NewRecorder()
 		app.ServeHTTP(w, req)
 

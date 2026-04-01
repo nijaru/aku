@@ -35,7 +35,9 @@ func TestContextInjection(t *testing.T) {
 
 	t.Run("with user in context", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/context", nil)
-		req = req.WithContext(context.WithValue(req.Context(), aku.ContextKey("user"), &User{ID: "1", Name: "John"}))
+		req = req.WithContext(
+			context.WithValue(req.Context(), aku.ContextKey("user"), &User{ID: "1", Name: "John"}),
+		)
 		w := httptest.NewRecorder()
 
 		app.ServeHTTP(w, req)

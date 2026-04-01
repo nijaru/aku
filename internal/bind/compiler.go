@@ -3,6 +3,7 @@ package bind
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"reflect"
 	"strings"
@@ -159,15 +160,13 @@ func GetCustomMessages(typ reflect.Type) map[string]string {
 	}
 
 	msgs := make(map[string]string)
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
+	for field := range typ.Fields() {
+		field := field
 
 		// Recurse into common Aku sections
 		switch field.Name {
 		case "Path", "Query", "Header", "Form", "Body":
-			for k, v := range GetCustomMessages(field.Type) {
-				msgs[k] = v
-			}
+			maps.Copy(msgs, GetCustomMessages(field.Type))
 			continue
 		}
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
 	"strconv"
 	"strings"
@@ -115,7 +116,11 @@ type Route interface {
 }
 
 // Generate builds an OpenAPI document from a list of routes and global security schemes.
-func Generate(title, version string, routes []Route, securitySchemes map[string]SecurityScheme) *Document {
+func Generate(
+	title, version string,
+	routes []Route,
+	securitySchemes map[string]SecurityScheme,
+) *Document {
 	g := &generator{
 		doc: &Document{
 			OpenAPI: "3.0.3",
@@ -267,7 +272,7 @@ func (g *generator) reflectToSchema(t reflect.Type) Schema {
 	if t.Name() == "FileHeader" && t.PkgPath() == "mime/multipart" {
 		return Schema{Type: "string", Format: "binary"}
 	}
-	if t.Implements(reflect.TypeOf((*io.Reader)(nil)).Elem()) {
+	if t.Implements(reflect.TypeFor[io.Reader]()) {
 		return Schema{Type: "string", Format: "binary"}
 	}
 
@@ -318,8 +323,8 @@ func (g *generator) applyValidation(s *Schema, tag string) {
 	if tag == "" {
 		return
 	}
-	parts := strings.Split(tag, ",")
-	for _, part := range parts {
+	parts := strings.SplitSeq(tag, ",")
+	for part := range parts {
 		kv := strings.Split(part, "=")
 		key := kv[0]
 		var val string
@@ -387,15 +392,13 @@ func (g *generator) applyValidation(s *Schema, tag string) {
 
 func (g *generator) buildStructSchema(t reflect.Type) Schema {
 	s := Schema{Type: "object", Properties: make(map[string]Schema)}
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
+		f := f
 
 		// Support embedded fields
 		if f.Anonymous && f.Tag.Get("json") == "" {
 			embedded := g.buildStructSchema(f.Type)
-			for k, v := range embedded.Properties {
-				s.Properties[k] = v
-			}
+			maps.Copy(s.Properties, embedded.Properties)
 			s.Required = append(s.Required, embedded.Required...)
 			continue
 		}
@@ -406,8 +409,8 @@ func (g *generator) buildStructSchema(t reflect.Type) Schema {
 		}
 		name := f.Name
 		if tag != "" {
-			if idx := strings.Index(tag, ","); idx != -1 {
-				name = tag[:idx]
+			if before, _, ok := strings.Cut(tag, ","); ok {
+				name = before
 			} else {
 				name = tag
 			}

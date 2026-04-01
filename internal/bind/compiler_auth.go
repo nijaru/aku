@@ -37,7 +37,8 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 		fTyp := field.Type
 
 		// Detect Bearer by type name for convenience
-		isBearer := strings.EqualFold(fTyp.Name(), "Bearer") || (fTyp.Kind() == reflect.Pointer && strings.EqualFold(fTyp.Elem().Name(), "Bearer"))
+		isBearer := strings.EqualFold(fTyp.Name(), "Bearer") ||
+			(fTyp.Kind() == reflect.Pointer && strings.EqualFold(fTyp.Elem().Name(), "Bearer"))
 
 		if isBearer || authTag == "bearer" {
 			name := authTag
@@ -131,21 +132,33 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 				auth := r.Header.Get("Authorization")
 				if auth == "" {
 					if step.required {
-						return &BindError{Field: step.paramKey, Source: "auth", Err: fmt.Errorf("missing bearer token")}
+						return &BindError{
+							Field:  step.paramKey,
+							Source: "auth",
+							Err:    fmt.Errorf("missing bearer token"),
+						}
 					}
 					continue
 				}
 				const prefix = "Bearer "
 				if !strings.HasPrefix(auth, prefix) {
 					if step.required {
-						return &BindError{Field: step.paramKey, Source: "auth", Err: fmt.Errorf("invalid authorization scheme, expected Bearer")}
+						return &BindError{
+							Field:  step.paramKey,
+							Source: "auth",
+							Err:    fmt.Errorf("invalid authorization scheme, expected Bearer"),
+						}
 					}
 					continue
 				}
 				token := strings.TrimPrefix(auth, prefix)
 				if token == "" {
 					if step.required {
-						return &BindError{Field: step.paramKey, Source: "auth", Err: fmt.Errorf("empty bearer token")}
+						return &BindError{
+							Field:  step.paramKey,
+							Source: "auth",
+							Err:    fmt.Errorf("empty bearer token"),
+						}
 					}
 					continue
 				}
@@ -180,7 +193,11 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 
 				if val == "" {
 					if step.required {
-						return &BindError{Field: step.paramKey, Source: "auth", Err: fmt.Errorf("missing API key")}
+						return &BindError{
+							Field:  step.paramKey,
+							Source: "auth",
+							Err:    fmt.Errorf("missing API key"),
+						}
 					}
 					continue
 				}

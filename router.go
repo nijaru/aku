@@ -31,37 +31,72 @@ type Router interface {
 }
 
 // Get registers a new GET route on the router.
-func Get[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+func Get[In any, Out any](
+	r Router,
+	pattern string,
+	handler Handler[In, Out],
+	opts ...RouteOption,
+) error {
 	return register(r, http.MethodGet, pattern, handler, opts...)
 }
 
 // Post registers a new POST route on the router.
-func Post[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+func Post[In any, Out any](
+	r Router,
+	pattern string,
+	handler Handler[In, Out],
+	opts ...RouteOption,
+) error {
 	return register(r, http.MethodPost, pattern, handler, opts...)
 }
 
 // Put registers a new PUT route on the router.
-func Put[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+func Put[In any, Out any](
+	r Router,
+	pattern string,
+	handler Handler[In, Out],
+	opts ...RouteOption,
+) error {
 	return register(r, http.MethodPut, pattern, handler, opts...)
 }
 
 // Patch registers a new PATCH route on the router.
-func Patch[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+func Patch[In any, Out any](
+	r Router,
+	pattern string,
+	handler Handler[In, Out],
+	opts ...RouteOption,
+) error {
 	return register(r, http.MethodPatch, pattern, handler, opts...)
 }
 
 // Delete registers a new DELETE route on the router.
-func Delete[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+func Delete[In any, Out any](
+	r Router,
+	pattern string,
+	handler Handler[In, Out],
+	opts ...RouteOption,
+) error {
 	return register(r, http.MethodDelete, pattern, handler, opts...)
 }
 
 // Options registers a new OPTIONS route on the router.
-func Options[In any, Out any](r Router, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+func Options[In any, Out any](
+	r Router,
+	pattern string,
+	handler Handler[In, Out],
+	opts ...RouteOption,
+) error {
 	return register(r, http.MethodOptions, pattern, handler, opts...)
 }
 
 // register registers a new route with the router.
-func register[In any, Out any](r Router, method, pattern string, handler Handler[In, Out], opts ...RouteOption) error {
+func register[In any, Out any](
+	r Router,
+	method, pattern string,
+	handler Handler[In, Out],
+	opts ...RouteOption,
+) error {
 	app := r.App()
 	meta := defaultRouteMeta()
 
@@ -70,17 +105,17 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 	meta.schema = schema
 
 	// Extract custom messages from the input struct (Query, Path, Body, etc.)
-	customMessages := bind.GetCustomMessages(reflect.TypeOf((*In)(nil)).Elem())
+	customMessages := bind.GetCustomMessages(reflect.TypeFor[In]())
 
 	for _, opt := range opts {
 		opt(&meta)
 	}
 
 	// Pre-determine response type for optimization.
-	outType := reflect.TypeOf((*Out)(nil)).Elem()
-	isReader := outType.Implements(reflect.TypeOf((*io.Reader)(nil)).Elem())
-	isStream := outType == reflect.TypeOf(Stream{})
-	isSSE := outType == reflect.TypeOf(SSE{})
+	outType := reflect.TypeFor[Out]()
+	isReader := outType.Implements(reflect.TypeFor[io.Reader]())
+	isStream := outType == reflect.TypeFor[Stream]()
+	isSSE := outType == reflect.TypeFor[SSE]()
 
 	// Type to cache the reflect.Value and pointer together.
 	type PooledIn struct {
@@ -138,7 +173,15 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 		if app.validator != nil {
 			if err := app.validator.Struct(in); err != nil {
 				if vErr, ok := errors.AsType[validator.ValidationErrors](err); ok {
-					handleError(app, w, r, problem.ValidationProblem("Input validation failed", problem.FromValidationErrors(vErr, customMessages)))
+					handleError(
+						app,
+						w,
+						r,
+						problem.ValidationProblem(
+							"Input validation failed",
+							problem.FromValidationErrors(vErr, customMessages),
+						),
+					)
 				} else {
 					handleError(app, w, r, problem.BadRequest(err.Error()))
 				}
@@ -227,7 +270,9 @@ func register[In any, Out any](r Router, method, pattern string, handler Handler
 		Security:    meta.security,
 		Schema:      schema,
 		OutputType:  outType,
-		middleware:  append(append([]func(http.Handler) http.Handler{}, groupMW...), meta.middleware...),
+		middleware: append(
+			append([]func(http.Handler) http.Handler{}, groupMW...),
+			meta.middleware...),
 	}
 
 	// Auto-register security schemes from auth extraction.

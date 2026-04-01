@@ -12,7 +12,10 @@ import (
 // with built-in string types, satisfying standard go linters (e.g., SA1029).
 type ContextKey string
 
-func compileCtx(sectionIdx int, typ reflect.Type) (func(context.Context, *http.Request, reflect.Value, *Config) error, []Parameter) {
+func compileCtx(
+	sectionIdx int,
+	typ reflect.Type,
+) (func(context.Context, *http.Request, reflect.Value, *Config) error, []Parameter) {
 	if typ.Kind() != reflect.Struct {
 		return nil, nil
 	}
@@ -40,52 +43,60 @@ func compileCtx(sectionIdx int, typ reflect.Type) (func(context.Context, *http.R
 		})
 
 		idx := i
-		extractors = append(extractors, func(ctx context.Context, v reflect.Value, cfg *Config) error {
-			section := v.Field(sectionIdx)
-			sectionVal := section
-			if section.CanAddr() {
-				sectionVal = section.Addr()
-			} else {
-				return nil
-			}
-
-			// Look up using the custom ContextKey type
-			val := ctx.Value(ContextKey(tag))
-			if val == nil {
-				// Fallback to string key for backwards compatibility
-				val = ctx.Value(tag)
-			}
-
-			if val == nil {
-				if optional {
+		extractors = append(
+			extractors,
+			func(ctx context.Context, v reflect.Value, cfg *Config) error {
+				section := v.Field(sectionIdx)
+				sectionVal := section
+				if section.CanAddr() {
+					sectionVal = section.Addr()
+				} else {
 					return nil
 				}
-				return &BindError{
-					Field:  field.Name,
-					Source: "context",
-					Err:    fmt.Errorf("missing required context value for %q", tag),
-				}
-			}
 
-			fieldVal := sectionVal.Elem().Field(idx)
-			if !fieldVal.CanSet() {
+				// Look up using the custom ContextKey type
+				val := ctx.Value(ContextKey(tag))
+				if val == nil {
+					// Fallback to string key for backwards compatibility
+					val = ctx.Value(tag)
+				}
+
+				if val == nil {
+					if optional {
+						return nil
+					}
+					return &BindError{
+						Field:  field.Name,
+						Source: "context",
+						Err:    fmt.Errorf("missing required context value for %q", tag),
+					}
+				}
+
+				fieldVal := sectionVal.Elem().Field(idx)
+				if !fieldVal.CanSet() {
+					return nil
+				}
+
+				reflectVal := reflect.ValueOf(val)
+				targetType := field.Type
+
+				if !reflectVal.Type().AssignableTo(targetType) {
+					return &BindError{
+						Field:  field.Name,
+						Source: "context",
+						Err: fmt.Errorf(
+							"context value for %q has type %T, expected %s",
+							tag,
+							val,
+							targetType,
+						),
+					}
+				}
+
+				fieldVal.Set(reflectVal)
 				return nil
-			}
-
-			reflectVal := reflect.ValueOf(val)
-			targetType := field.Type
-
-			if !reflectVal.Type().AssignableTo(targetType) {
-				return &BindError{
-					Field:  field.Name,
-					Source: "context",
-					Err:    fmt.Errorf("context value for %q has type %T, expected %s", tag, val, targetType),
-				}
-			}
-
-			fieldVal.Set(reflectVal)
-			return nil
-		})
+			},
+		)
 	}
 
 	if len(extractors) == 0 {

@@ -89,7 +89,11 @@ func Recover(next http.Handler) http.Handler {
 				// We don't use handleError here because we want to keep middleware independent
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(`{"type":"https://aku.sh/problems/internal-error","title":"Internal Server Error","status":500}`))
+				w.Write(
+					[]byte(
+						`{"type":"https://aku.sh/problems/internal-error","title":"Internal Server Error","status":500}`,
+					),
+				)
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -119,7 +123,13 @@ func Limit(rps float64, burst int) func(http.Handler) http.Handler {
 				w.WriteHeader(prob.Status)
 				// Small hack to marshal JSON since we don't have access to render here easily
 				// Alternatively, we could just copy the JSON render logic for this single case
-				w.Write([]byte(`{"type":"` + prob.Type + `","title":"` + prob.Title + `","status":` + strconv.Itoa(prob.Status) + `,"detail":"` + prob.Detail + `"}`))
+				w.Write(
+					[]byte(
+						`{"type":"` + prob.Type + `","title":"` + prob.Title + `","status":` + strconv.Itoa(
+							prob.Status,
+						) + `,"detail":"` + prob.Detail + `"}`,
+					),
+				)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -162,10 +172,12 @@ func CORS(opts CORSOptions) func(http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			if r.Method == http.MethodOptions {
 				if len(opts.AllowedMethods) > 0 {
-					w.Header().Set("Access-Control-Allow-Methods", strings.Join(opts.AllowedMethods, ", "))
+					w.Header().
+						Set("Access-Control-Allow-Methods", strings.Join(opts.AllowedMethods, ", "))
 				}
 				if len(opts.AllowedHeaders) > 0 {
-					w.Header().Set("Access-Control-Allow-Headers", strings.Join(opts.AllowedHeaders, ", "))
+					w.Header().
+						Set("Access-Control-Allow-Headers", strings.Join(opts.AllowedHeaders, ", "))
 				}
 				if opts.MaxAge > 0 {
 					w.Header().Set("Access-Control-Max-Age", strconv.Itoa(opts.MaxAge))
@@ -175,7 +187,8 @@ func CORS(opts CORSOptions) func(http.Handler) http.Handler {
 			}
 
 			if len(opts.ExposedHeaders) > 0 {
-				w.Header().Set("Access-Control-Expose-Headers", strings.Join(opts.ExposedHeaders, ", "))
+				w.Header().
+					Set("Access-Control-Expose-Headers", strings.Join(opts.ExposedHeaders, ", "))
 			}
 
 			next.ServeHTTP(w, r)
@@ -209,13 +222,11 @@ func (w *loggingResponseWriter) Flush() {
 	}
 }
 
-var (
-	brotliPool = sync.Pool{
-		New: func() any {
-			return brotli.NewWriter(nil)
-		},
-	}
-)
+var brotliPool = sync.Pool{
+	New: func() any {
+		return brotli.NewWriter(nil)
+	},
+}
 
 // Compress returns a middleware that compresses HTTP responses using Brotli, Zstandard, or Gzip.
 // It prioritizes Brotli, then Zstandard, then Gzip.

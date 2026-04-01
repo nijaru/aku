@@ -25,6 +25,9 @@ func TestApp_Middleware(t *testing.T) {
 	app.ServeHTTP(rr, req)
 
 	if rr.Header().Get("X-Global-Middleware") != "active" {
-		t.Errorf("expected X-Global-Middleware header, got %q", rr.Header().Get("X-Global-Middleware"))
+		t.Errorf(
+			"expected X-Global-Middleware header, got %q",
+			rr.Header().Get("X-Global-Middleware"),
+		)
 	}
 }

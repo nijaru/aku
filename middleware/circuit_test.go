@@ -24,7 +24,7 @@ func TestCircuitBreaker_ThresholdOpening(t *testing.T) {
 	})
 
 	// Trip the breaker with 3 failures
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !cb.Allow() {
 			t.Fatalf("expected Allow on failure %d", i+1)
 		}
@@ -191,7 +191,7 @@ func TestCircuitBreakerMiddleware_5xxCounts(t *testing.T) {
 	mw := CircuitBreakerMiddleware(cb)(handler)
 
 	// Two 500s should trip the breaker
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()
 		mw.ServeHTTP(rec, req)
@@ -221,7 +221,7 @@ func TestCircuitBreakerMiddleware_CustomFailureFn(t *testing.T) {
 	})
 	mw := CircuitBreakerMiddleware(cb)(handler)
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		rec := httptest.NewRecorder()
 		mw.ServeHTTP(rec, req)

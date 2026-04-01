@@ -23,8 +23,8 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 	var fileInfos []formInfo
 	var params []Parameter
 
-	fileHeaderType := reflect.TypeOf((*multipart.FileHeader)(nil))
-	fileHeaderSliceType := reflect.TypeOf([]*multipart.FileHeader(nil))
+	fileHeaderType := reflect.TypeFor[*multipart.FileHeader]()
+	fileHeaderSliceType := reflect.TypeFor[[]*multipart.FileHeader]()
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -34,7 +34,10 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 		}
 
 		if field.Type == fileHeaderType || field.Type == fileHeaderSliceType {
-			fileInfos = append(fileInfos, formInfo{idx: i, name: tag, isSlice: field.Type.Kind() == reflect.Slice})
+			fileInfos = append(
+				fileInfos,
+				formInfo{idx: i, name: tag, isSlice: field.Type.Kind() == reflect.Slice},
+			)
 		} else {
 			elemTyp := field.Type
 			if field.Type.Kind() == reflect.Slice {
@@ -57,13 +60,13 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 			Message:  field.Tag.Get("msg"),
 			Example:  field.Tag.Get("example"),
 		})
-		}
-
+	}
 
 	return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
 		// Ensure form is parsed.
 		// Use dynamic max memory from config.
-		if err := r.ParseMultipartForm(cfg.MaxMultipartMemory); err != nil && err != http.ErrNotMultipart {
+		if err := r.ParseMultipartForm(cfg.MaxMultipartMemory); err != nil &&
+			err != http.ErrNotMultipart {
 			return &BindError{Source: "form", Err: err}
 		}
 

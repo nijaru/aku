@@ -130,12 +130,14 @@ func TestCompiler_Schema(t *testing.T) {
 	}
 
 	// Verify Path Parameter
-	if schema.Parameters[0].Name != "id" || schema.Parameters[0].In != "path" || !schema.Parameters[0].Required {
+	if schema.Parameters[0].Name != "id" || schema.Parameters[0].In != "path" ||
+		!schema.Parameters[0].Required {
 		t.Errorf("unexpected path parameter: %+v", schema.Parameters[0])
 	}
 
 	// Verify Query Parameter
-	if schema.Parameters[1].Name != "page" || schema.Parameters[1].In != "query" || schema.Parameters[1].Required {
+	if schema.Parameters[1].Name != "page" || schema.Parameters[1].In != "query" ||
+		schema.Parameters[1].Required {
 		t.Errorf("unexpected query parameter: %+v", schema.Parameters[1])
 	}
 
@@ -249,6 +251,7 @@ func TestCompiler_CoercionErrors(t *testing.T) {
 		t.Fatal("expected error for invalid integer coercion, got nil")
 	}
 }
+
 func TestCompiler_MapFields(t *testing.T) {
 	type MapRequest struct {
 		Query struct {
@@ -263,7 +266,11 @@ func TestCompiler_MapFields(t *testing.T) {
 
 	extractor, _ := bind.Compiler[MapRequest]()
 
-	req := httptest.NewRequest(http.MethodGet, "/?filter[name]=nick&filter[type]=admin&score[rank]=1&score[lvl]=99", nil)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/?filter[name]=nick&filter[type]=admin&score[rank]=1&score[lvl]=99",
+		nil,
+	)
 	req.Header.Set("X-Meta-Source", "github")
 	req.Header.Set("X-Meta-Env", "prod")
 	req.Header.Set("tags[verified]", "true")
@@ -308,7 +315,11 @@ func TestCompiler_NestedStructs(t *testing.T) {
 
 	extractor, _ := bind.Compiler[NestedRequest]()
 
-	req := httptest.NewRequest(http.MethodGet, "/?page[size]=10&page[number]=1&filter[name]=aku", nil)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/?page[size]=10&page[number]=1&filter[name]=aku",
+		nil,
+	)
 	var in NestedRequest
 
 	if err := extractor(context.Background(), req, &in, reflect.ValueOf(&in).Elem(), &bind.Config{}); err != nil {

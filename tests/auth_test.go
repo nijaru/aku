@@ -153,17 +153,17 @@ func TestAuthOpenAPI_SecuritySchemes(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	var doc map[string]interface{}
+	var doc map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
 		t.Fatal(err)
 	}
 
-	components, ok := doc["components"].(map[string]interface{})
+	components, ok := doc["components"].(map[string]any)
 	if !ok {
 		t.Fatal("expected components in OpenAPI doc")
 	}
 
-	schemes, ok := components["securitySchemes"].(map[string]interface{})
+	schemes, ok := components["securitySchemes"].(map[string]any)
 	if !ok {
 		t.Fatal("expected securitySchemes in OpenAPI components")
 	}

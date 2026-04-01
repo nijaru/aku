@@ -31,7 +31,8 @@ func TestGroup(t *testing.T) {
 		Path struct {
 			ID string `path:"id"`
 		}
-	}) (map[string]string, error) {
+	},
+	) (map[string]string, error) {
 		order = append(order, "handler:"+in.Path.ID)
 		return map[string]string{"id": in.Path.ID}, nil
 	})

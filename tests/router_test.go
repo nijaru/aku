@@ -101,6 +101,7 @@ func TestRegister_Error(t *testing.T) {
 		t.Errorf("unexpected invalid_param: %+v", prob.InvalidParams[0])
 	}
 }
+
 func TestMiddleware(t *testing.T) {
 	app := aku.New()
 	var order []string

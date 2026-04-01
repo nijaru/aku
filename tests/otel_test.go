@@ -25,7 +25,8 @@ func TestOTelMiddleware(t *testing.T) {
 		Path struct {
 			ID string `path:"id"`
 		}
-	}) (string, error) {
+	},
+	) (string, error) {
 		return "hello " + in.Path.ID, nil
 	})
 
@@ -79,7 +80,10 @@ func TestOTelMiddleware(t *testing.T) {
 		}
 
 		if attrMap["http.problem.title"] != "Bad Request" {
-			t.Errorf("expected http.problem.title 'Bad Request', got '%s'", attrMap["http.problem.title"])
+			t.Errorf(
+				"expected http.problem.title 'Bad Request', got '%s'",
+				attrMap["http.problem.title"],
+			)
 		}
 	})
 }

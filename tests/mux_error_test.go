@@ -25,7 +25,10 @@ func TestApp_MuxErrors(t *testing.T) {
 		}
 
 		if w.Header().Get("Content-Type") != "application/problem+json" {
-			t.Errorf("Expected content-type application/problem+json, got %q", w.Header().Get("Content-Length"))
+			t.Errorf(
+				"Expected content-type application/problem+json, got %q",
+				w.Header().Get("Content-Length"),
+			)
 		}
 
 		var prob problem.Details
@@ -53,7 +56,10 @@ func TestApp_MuxErrors(t *testing.T) {
 		}
 
 		if w.Header().Get("Content-Type") != "application/problem+json" {
-			t.Errorf("Expected content-type application/problem+json, got %q", w.Header().Get("Content-Type"))
+			t.Errorf(
+				"Expected content-type application/problem+json, got %q",
+				w.Header().Get("Content-Type"),
+			)
 		}
 
 		var prob problem.Details

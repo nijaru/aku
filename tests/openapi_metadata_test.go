@@ -39,7 +39,7 @@ func TestOpenAPIMetadata(t *testing.T) {
 	)
 
 	doc := app.OpenAPIDocument("Test API", "1.0.0")
-	
+
 	// Verify normal route
 	path, ok := doc.Paths["/normal"]
 	if !ok {

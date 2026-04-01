@@ -11,7 +11,7 @@ import (
 )
 
 type User struct {
-	ID   int    `json:"id" validate:"required"`
+	ID   int    `json:"id"   validate:"required"`
 	Name string `json:"name" validate:"required"`
 }
 
@@ -20,7 +20,8 @@ func TestTester_Fixes(t *testing.T) {
 
 	aku.Post(app, "/echo", func(ctx context.Context, in struct {
 		Body User
-	}) (User, error) {
+	},
+	) (User, error) {
 		return in.Body, nil
 	})
 
@@ -62,7 +63,8 @@ func TestTester_WithBody(t *testing.T) {
 	app := aku.New()
 	aku.Post(app, "/body", func(ctx context.Context, in struct {
 		Body map[string]string
-	}) (map[string]string, error) {
+	},
+	) (map[string]string, error) {
 		return in.Body, nil
 	})
 

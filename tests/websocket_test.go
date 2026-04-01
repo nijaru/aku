@@ -25,21 +25,25 @@ type WSMessage struct {
 func TestWebsocket(t *testing.T) {
 	app := aku.New()
 
-	aku.WS(app, "/chat", func(ctx context.Context, in WSHandshake, ws *aku.Websocket[WSMessage]) error {
-		if in.Query.Token != "secret" {
-			return nil // Handled by Accept but we test extraction here
-		}
+	aku.WS(
+		app,
+		"/chat",
+		func(ctx context.Context, in WSHandshake, ws *aku.Websocket[WSMessage]) error {
+			if in.Query.Token != "secret" {
+				return nil // Handled by Accept but we test extraction here
+			}
 
-		for {
-			msg, err := ws.Receive(ctx)
-			if err != nil {
-				return err
+			for {
+				msg, err := ws.Receive(ctx)
+				if err != nil {
+					return err
+				}
+				if err := ws.Send(ctx, WSMessage{Text: "echo: " + msg.Text}); err != nil {
+					return err
+				}
 			}
-			if err := ws.Send(ctx, WSMessage{Text: "echo: " + msg.Text}); err != nil {
-				return err
-			}
-		}
-	})
+		},
+	)
 
 	srv := httptest.NewServer(app)
 	defer srv.Close()

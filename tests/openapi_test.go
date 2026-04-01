@@ -82,7 +82,10 @@ func TestOpenAPI(t *testing.T) {
 	components := raw["components"].(map[string]any)
 	schemas := components["schemas"].(map[string]any)
 	if _, ok := schemas["github.com.nijaru.aku.UserResponse"]; !ok {
-		t.Errorf("expected github.com.nijaru.aku.UserResponse in components/schemas, but got %v", schemas)
+		t.Errorf(
+			"expected github.com.nijaru.aku.UserResponse in components/schemas, but got %v",
+			schemas,
+		)
 	}
 }
 
@@ -112,7 +115,11 @@ func TestOpenAPI_Advanced(t *testing.T) {
 		t.Fatalf("expected age param, got %s", ageParam.Name)
 	}
 	if *ageParam.Schema.Minimum != 18 || *ageParam.Schema.Maximum != 120 {
-		t.Errorf("expected age validation 18-120, got min=%v, max=%v", *ageParam.Schema.Minimum, *ageParam.Schema.Maximum)
+		t.Errorf(
+			"expected age validation 18-120, got min=%v, max=%v",
+			*ageParam.Schema.Minimum,
+			*ageParam.Schema.Maximum,
+		)
 	}
 
 	// Verify Form in RequestBody
@@ -121,7 +128,10 @@ func TestOpenAPI_Advanced(t *testing.T) {
 		t.Errorf("expected object form body, got %s", formBody.Schema.Type)
 	}
 	if formBody.Schema.Properties["avatar"].Format != "binary" {
-		t.Errorf("expected binary avatar, got format %s", formBody.Schema.Properties["avatar"].Format)
+		t.Errorf(
+			"expected binary avatar, got format %s",
+			formBody.Schema.Properties["avatar"].Format,
+		)
 	}
 	if len(formBody.Schema.Required) != 1 || formBody.Schema.Required[0] != "name" {
 		t.Errorf("expected name to be required in form, got %v", formBody.Schema.Required)

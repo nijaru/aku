@@ -60,7 +60,7 @@ func Middleware(opts ...Option) func(http.Handler) http.Handler {
 			// Extract remote trace context.
 			ctx := c.propagator.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 
-			// Start the span. 
+			// Start the span.
 			// If this is a route-level middleware (inside mux), r.Pattern is already set.
 			// If this is a global middleware (outside mux), r.Pattern is empty and we'll update it later.
 			spanName := r.Pattern
@@ -79,7 +79,7 @@ func Middleware(opts ...Option) func(http.Handler) http.Handler {
 
 			// Pass the span context down.
 			r = r.WithContext(ctx)
-			
+
 			// Call the next handler.
 			next.ServeHTTP(w, r)
 

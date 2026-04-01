@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -39,7 +40,12 @@ func (t *Tester) Get(path string) *RequestBuilder {
 
 // Post starts a POST request.
 func (t *Tester) Post(path string) *RequestBuilder {
-	return &RequestBuilder{tester: t, method: http.MethodPost, path: path, header: make(http.Header)}
+	return &RequestBuilder{
+		tester: t,
+		method: http.MethodPost,
+		path:   path,
+		header: make(http.Header),
+	}
 }
 
 // Put starts a PUT request.
@@ -49,17 +55,32 @@ func (t *Tester) Put(path string) *RequestBuilder {
 
 // Patch starts a PATCH request.
 func (t *Tester) Patch(path string) *RequestBuilder {
-	return &RequestBuilder{tester: t, method: http.MethodPatch, path: path, header: make(http.Header)}
+	return &RequestBuilder{
+		tester: t,
+		method: http.MethodPatch,
+		path:   path,
+		header: make(http.Header),
+	}
 }
 
 // Delete starts a DELETE request.
 func (t *Tester) Delete(path string) *RequestBuilder {
-	return &RequestBuilder{tester: t, method: http.MethodDelete, path: path, header: make(http.Header)}
+	return &RequestBuilder{
+		tester: t,
+		method: http.MethodDelete,
+		path:   path,
+		header: make(http.Header),
+	}
 }
 
 // Options starts an OPTIONS request.
 func (t *Tester) Options(path string) *RequestBuilder {
-	return &RequestBuilder{tester: t, method: http.MethodOptions, path: path, header: make(http.Header)}
+	return &RequestBuilder{
+		tester: t,
+		method: http.MethodOptions,
+		path:   path,
+		header: make(http.Header),
+	}
 }
 
 // WithHeader adds a header to the request.
@@ -104,9 +125,7 @@ func (r *RequestBuilder) Do() *Response {
 		bodyReader = bytes.NewReader(r.body)
 	}
 	req := httptest.NewRequest(r.method, r.path, bodyReader)
-	for k, v := range r.header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, r.header)
 	w := httptest.NewRecorder()
 	r.tester.app.ServeHTTP(w, req)
 	return &Response{tester: r.tester, resp: w}
@@ -144,7 +163,11 @@ func (r *Response) ExpectJSON(expected any) *Response {
 	// Unmarshal both into a map or slice for normalized comparison (handles float64 issues)
 	var actualVal any
 	if err := json.Unmarshal(r.resp.Body.Bytes(), &actualVal); err != nil {
-		r.tester.t.Fatalf("failed to unmarshal response body: %v\nBody: %s", err, r.resp.Body.String())
+		r.tester.t.Fatalf(
+			"failed to unmarshal response body: %v\nBody: %s",
+			err,
+			r.resp.Body.String(),
+		)
 	}
 
 	expectedJSON, _ := json.Marshal(expected)
@@ -163,7 +186,11 @@ func (r *Response) ExpectJSONFunc(fn func(map[string]any) error) *Response {
 	r.tester.t.Helper()
 	var actual map[string]any
 	if err := json.Unmarshal(r.resp.Body.Bytes(), &actual); err != nil {
-		r.tester.t.Fatalf("failed to unmarshal response body: %v\nBody: %s", err, r.resp.Body.String())
+		r.tester.t.Fatalf(
+			"failed to unmarshal response body: %v\nBody: %s",
+			err,
+			r.resp.Body.String(),
+		)
 	}
 	if err := fn(actual); err != nil {
 		r.tester.t.Errorf("ExpectJSONFunc failed: %v", err)

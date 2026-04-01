@@ -21,7 +21,7 @@ func TestRouter_Static(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	content := "hello static"
-	err = os.WriteFile(filepath.Join(tmpDir, "hello.txt"), []byte(content), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "hello.txt"), []byte(content), 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestGroup_Static(t *testing.T) {
 
 	tmpDir, _ := os.MkdirTemp("", "aku-group-static-test")
 	defer os.RemoveAll(tmpDir)
-	os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("v1 content"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("v1 content"), 0o644)
 
 	v1.Static("/assets", tmpDir)
 

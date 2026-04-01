@@ -16,10 +16,10 @@ type Binder interface {
 }
 
 var (
-	binderType          = reflect.TypeOf((*Binder)(nil)).Elem()
-	textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
-	durationType        = reflect.TypeOf(time.Duration(0))
-	urlType             = reflect.TypeOf(url.URL{})
+	binderType          = reflect.TypeFor[Binder]()
+	textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
+	durationType        = reflect.TypeFor[time.Duration]()
+	urlType             = reflect.TypeFor[url.URL]()
 )
 
 // Coercer is a function that converts a string value into a target reflect.Value.

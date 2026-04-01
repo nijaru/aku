@@ -24,7 +24,7 @@ func StreamSSE(ctx context.Context, _ struct{}) (*aku.SSE, error) {
 
 	go func() {
 		defer close(events)
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			select {
 			case <-ctx.Done():
 				return

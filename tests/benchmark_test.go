@@ -69,10 +69,15 @@ func BenchmarkAkuParallel(b *testing.B) {
 // BenchmarkAkuHandleHTTP measures the "escape hatch" for standard handlers.
 func BenchmarkAkuHandleHTTP(b *testing.B) {
 	app := aku.New()
-	app.HandleHTTP(http.MethodGet, "/test/{id}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}), aku.WithSummary("benchmark handler"))
+	app.HandleHTTP(
+		http.MethodGet,
+		"/test/{id}",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("ok"))
+		}),
+		aku.WithSummary("benchmark handler"),
+	)
 
 	req := httptest.NewRequest(http.MethodGet, "/test/123", nil)
 	w := httptest.NewRecorder()

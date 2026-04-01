@@ -144,7 +144,10 @@ func TestCompressionMiddleware(t *testing.T) {
 		app.ServeHTTP(rec, req)
 
 		if rec.Header().Get("Content-Encoding") != "" {
-			t.Errorf("expected no Content-Encoding for image/png, got %s", rec.Header().Get("Content-Encoding"))
+			t.Errorf(
+				"expected no Content-Encoding for image/png, got %s",
+				rec.Header().Get("Content-Encoding"),
+			)
 		}
 		if rec.Body.String() != "fake-image-data" {
 			t.Errorf("expected fake-image-data, got %s", rec.Body.String())
