@@ -89,6 +89,16 @@ func Unauthorized(detail string) *Details {
 	}
 }
 
+// PayloadTooLarge creates a 413 Payload Too Large problem.
+func PayloadTooLarge(detail string) *Details {
+	return &Details{
+		Type:   "about:blank",
+		Title:  "Payload Too Large",
+		Status: http.StatusRequestEntityTooLarge,
+		Detail: detail,
+	}
+}
+
 // TooManyRequests creates a generic 429 Too Many Requests problem.
 func TooManyRequests(detail string) *Details {
 	return &Details{
