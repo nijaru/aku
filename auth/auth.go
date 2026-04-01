@@ -17,7 +17,9 @@
 //	}
 package auth
 
-import "net/http"
+import (
+	"net/http"
+)
 
 // Bearer is a simple string alias representing a bearer token.
 // Place it in the Auth section of a handler input struct.
@@ -35,13 +37,7 @@ func RequireBearer() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			auth := r.Header.Get("Authorization")
 			if len(auth) < 7 || auth[:7] != "Bearer " || auth[7:] == "" {
-				w.Header().Set("Content-Type", "application/problem+json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write(
-					[]byte(
-						`{"type":"about:blank","title":"Unauthorized","status":401,"detail":"Missing or invalid bearer token"}`,
-					),
-				)
+				write401(w, "Missing or invalid bearer token")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -56,16 +52,18 @@ func RequireAPIKey(headerName string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get(headerName) == "" {
-				w.Header().Set("Content-Type", "application/problem+json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write(
-					[]byte(
-						`{"type":"about:blank","title":"Unauthorized","status":401,"detail":"Missing API key"}`,
-					),
-				)
+				write401(w, "Missing API key")
 				return
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func write401(w http.ResponseWriter, detail string) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(http.StatusUnauthorized)
+	w.Write([]byte(
+		`{"type":"about:blank","title":"Unauthorized","status":401,"detail":"` + detail + `"}`,
+	))
 }

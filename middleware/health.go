@@ -7,55 +7,53 @@ import (
 	"sync"
 )
 
-// HealthChecker implements the health checks for liveness/readiness.
+// HealthChecker manages liveness and readiness checks.
+// Safe for concurrent use.
 type HealthChecker struct {
-	// Checks are functions that verify the application's health.
-	// A nil error means the check passed.
 	Checks map[string]CheckFunc
 }
 
-// CheckFunc defines a liveness or readiness test.
+// CheckFunc defines a liveness or readiness verification.
+// A nil return value indicates the check passed.
 type CheckFunc func(context.Context) error
 
-// HealthStatus represents the response for /ready.
+// HealthStatus is the JSON response shape for /ready.
 type HealthStatus struct {
 	Status       string            `json:"status"`
 	ChecksStatus map[string]string `json:"checks,omitempty"`
 }
 
-// NewHealthChecker creates a new health checker registry.
+const passedResponse = `{"status":"passed"}`
+
+// NewHealthChecker creates an empty HealthChecker.
 func NewHealthChecker() HealthChecker {
-	return HealthChecker{
-		Checks: make(map[string]CheckFunc),
-	}
+	return HealthChecker{Checks: make(map[string]CheckFunc)}
 }
 
-// AddRegister adds a readiness check. If the check fails, the service is
-// considered not ready. If the check panics, it is captured as a check
-// failure.
+// Add registers a named readiness check.
+// Panics on nil check function.
 func (hc *HealthChecker) Add(name string, fn CheckFunc) {
 	hc.Checks[name] = fn
 }
 
-// Liveness returns an http.Handler for liveness checks.
-// Always responds with 200 OK. Use this for Kubernetes liveness probes.
-func (hc HealthChecker) Liveness() http.Handler {
+// Liveness returns an http.Handler that always responds 200 OK.
+// Use for Kubernetes liveness probes.
+func (hc *HealthChecker) Liveness() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"passed"}`))
+		w.Write([]byte(passedResponse))
 	})
 }
 
-// Readiness returns an http.Handler for readiness checks.
-// Runs all registered checks concurrently and returns 503 if any fail.
-func (hc HealthChecker) Readiness() http.Handler {
+// Readiness returns an http.Handler that runs all registered checks
+// concurrently. Responses 200 when all pass, 503 when any fail.
+func (hc *HealthChecker) Readiness() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(hc.Checks) == 0 {
-			// No registered checks = ready.
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status":"passed"}`))
+			w.Write([]byte(passedResponse))
 			return
 		}
 
@@ -64,11 +62,7 @@ func (hc HealthChecker) Readiness() http.Handler {
 		var wg sync.WaitGroup
 
 		for name, check := range hc.Checks {
-			wg.Add(1)
-			name := name
-			check := check
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if err := check(r.Context()); err != nil {
 					mu.Lock()
 					results[name] = "failed: " + err.Error()
@@ -78,12 +72,12 @@ func (hc HealthChecker) Readiness() http.Handler {
 					results[name] = "passed"
 					mu.Unlock()
 				}
-			}()
+			})
 		}
 
 		wg.Wait()
 
-		anyFailed := false
+		var anyFailed bool
 		for _, v := range results {
 			if len(v) > 6 && v[:6] == "failed" {
 				anyFailed = true
@@ -108,16 +102,15 @@ func (hc HealthChecker) Readiness() http.Handler {
 	})
 }
 
-// Simple health check that returns an error if the context is cancelled.
+// HealthyCheck is a no-op check that always passes.
 func HealthyCheck(_ context.Context) error {
 	return nil
 }
 
-// Middleware returns middleware that intercepts /health and /ready
-// paths before forwarding to the main handler. This allows attaching
-// liveness and readiness endpoints to any http.Handler without
+// Middleware intercepts /health and /ready before forwarding to next.
+// This allows attaching health endpoints to any http.Handler without
 // polluting the application router.
-func (hc HealthChecker) Middleware(next http.Handler) http.Handler {
+func (hc *HealthChecker) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/health":

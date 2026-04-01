@@ -20,8 +20,9 @@ type File struct {
 	Header *multipart.FileHeader
 }
 
-// Open opens the file for reading. Returns the file size along with the reader.
-func (f File) Open() (fh io.ReadCloser, size int64, err error) {
+// Open opens the file for reading. Returns the reader and the file size.
+// The caller must close the returned reader when done.
+func (f File) Open() (io.ReadCloser, int64, error) {
 	if f.Header == nil {
 		return nil, 0, fmt.Errorf("file header is nil")
 	}

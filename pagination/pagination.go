@@ -8,14 +8,14 @@ import (
 // Page represents offset-based pagination.
 type Page struct {
 	Offset int `query:"offset" doc:"Number of records to skip"`
-	Limit  int `query:"limit" doc:"Maximum number of records to return"`
+	Limit  int `query:"limit"  doc:"Maximum number of records to return"`
 }
 
 // Cursor represents cursor-based pagination.
 type Cursor struct {
-	After  string `query:"after" doc:"Cursor pointing to the start of the next page"`
+	After  string `query:"after"  doc:"Cursor pointing to the start of the next page"`
 	Before string `query:"before" doc:"Cursor pointing to the start of the previous page"`
-	Limit  int    `query:"limit" doc:"Maximum number of records to return"`
+	Limit  int    `query:"limit"  doc:"Maximum number of records to return"`
 }
 
 // PageParams wraps Page and Limit with clamping/defaults.
@@ -65,8 +65,8 @@ type PageResponse[T any] struct {
 
 // CursorResponse is a paginated response for cursor-based pagination.
 type CursorResponse[T any] struct {
-	Data  []T    `json:"data"`
-	Links Links  `json:"links"`
+	Data    []T   `json:"data"`
+	Links   Links `json:"links"`
 	HasMore bool  `json:"has_more"`
 }
 
