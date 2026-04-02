@@ -19,6 +19,7 @@ import (
 // App is the core framework application, wrapping a standard library HTTP multiplexer.
 type App struct {
 	mux                *http.ServeMux
+	handler            http.Handler
 	middleware         []func(http.Handler) http.Handler
 	routes             []*Route
 	validator          Validator
@@ -45,6 +46,7 @@ func New(opts ...Option) *App {
 	}
 
 	a.bindConfig.MaxMultipartMemory = a.MaxMultipartMemory
+	a.refreshHandler()
 
 	return a
 }
@@ -52,6 +54,11 @@ func New(opts ...Option) *App {
 // Use adds global middleware to the application.
 func (a *App) Use(mw ...func(http.Handler) http.Handler) {
 	a.middleware = append(a.middleware, mw...)
+	a.refreshHandler()
+}
+
+func (a *App) refreshHandler() {
+	a.handler = wrapHandler(a.mux, a.middleware)
 }
 
 // Group creates a new route group with the given prefix and middleware.
@@ -163,10 +170,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	iw.hijacked = false
 	defer errorInterceptorPool.Put(iw)
 
-	var finalHandler http.Handler = a.mux
-
-	for i := len(a.middleware) - 1; i >= 0; i-- {
-		finalHandler = a.middleware[i](finalHandler)
+	finalHandler := a.handler
+	if finalHandler == nil {
+		finalHandler = a.mux
 	}
 
 	finalHandler.ServeHTTP(iw, r)

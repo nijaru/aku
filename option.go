@@ -17,6 +17,7 @@ type Option func(*App)
 func WithGlobalMiddleware(mw ...func(http.Handler) http.Handler) Option {
 	return func(a *App) {
 		a.middleware = append(a.middleware, mw...)
+		a.refreshHandler()
 	}
 }
 
