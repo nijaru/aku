@@ -130,8 +130,12 @@ aku.Post(app, "/secure", MyHandler,
 
 ## Testing
 
-Aku's integration tests live in `tests/` and use repo-local helpers to keep
-assertions concise. A public fluent test DSL is still on the roadmap.
+Aku's integration tests live in `tests/` and use repo-local helpers in
+`internal/testutil` to keep assertions concise.
+
+That helper stays internal for now; the public API is the framework itself, not
+another testing abstraction. If you need to write your own Aku tests, use
+`httptest` directly or copy the patterns that fit your app.
 
 ## License
 
