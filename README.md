@@ -14,7 +14,7 @@ Aku bridges the gap between the standard library's `net/http` and the ergonomics
 - **Validation**: Built-in support for `go-playground/validator` tags and explicit `Validate() error` hooks.
 - **Streaming & SSE**: First-class support for `io.Reader` streaming and Server-Sent Events.
 - **Middleware Suite**: Production-ready `Recover`, `Timeout`, and `CORS` implementations.
-- **Fluent Testing**: A chainable testing API that makes asserting on complex API behaviors simple.
+- **Integration Testing**: The repo's integration suite uses chainable helpers to keep API assertions readable.
 
 ## Performance
 
@@ -130,19 +130,8 @@ aku.Post(app, "/secure", MyHandler,
 
 ## Testing
 
-Aku includes a fluent testing API that handles JSON marshaling and assertions.
-
-```go
-func TestGreet(t *testing.T) {
-	app := aku.New()
-	aku.Get(app, "/greet/{name}", Greet)
-
-	aku.Test(t, app).
-		Get("/greet/world?shout=true").
-		ExpectStatus(200).
-		ExpectJSON(GreetResponse{Message: "Hello, world!"})
-}
-```
+Aku's integration tests live in `tests/` and use repo-local helpers to keep
+assertions concise. A public fluent test DSL is still on the roadmap.
 
 ## License
 
