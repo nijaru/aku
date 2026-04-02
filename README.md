@@ -92,6 +92,15 @@ Useful local checks:
 - `make fmt-check` to verify formatting without changing files
 - `make check` to run formatting, tests, and the build
 
+Aku also ships a minimal project scaffold generator for existing Go modules:
+
+```bash
+go run ./cmd/aku init --dir . --name api
+```
+
+It writes a conventional `cmd/<name>/main.go` plus `internal/app` layout without
+forcing extra framework opinions.
+
 ## Request Extraction
 
 Aku uses struct sections to define where data comes from. Each section is optional.
