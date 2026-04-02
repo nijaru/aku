@@ -71,7 +71,7 @@ func main() {
 	app.SwaggerUI("/docs", "/openapi.json")
 
 	log.Println("Serving on :8080")
-log.Fatal(http.ListenAndServe(":8080", app))
+	log.Fatal(http.ListenAndServe(":8080", app))
 }
 ```
 
@@ -85,6 +85,12 @@ make hooks
 
 That configures Git to run `.githooks/pre-commit`, which formats staged Go
 files before the commit is created.
+
+Useful local checks:
+
+- `make fmt` to rewrite tracked Go files in place
+- `make fmt-check` to verify formatting without changing files
+- `make check` to run formatting, tests, and the build
 
 ## Request Extraction
 
