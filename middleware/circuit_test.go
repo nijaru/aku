@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -65,6 +66,41 @@ func TestCircuitBreaker_RecoveryToHalfOpen(t *testing.T) {
 	state := cb.State()
 	if state != StateHalfOpen {
 		t.Fatalf("expected half-open after timeout, got %v", state)
+	}
+}
+
+func TestCircuitBreaker_HalfOpen_AllowsSingleProbe(t *testing.T) {
+	cb := NewCircuitBreaker(CircuitBreakerConfig{
+		FailureThreshold: 1,
+		RecoveryTimeout:  30 * time.Millisecond,
+	})
+
+	cb.Allow()
+	cb.Record(false)
+
+	time.Sleep(40 * time.Millisecond)
+
+	const probes = 16
+	start := make(chan struct{})
+	var allowed int32
+	var wg sync.WaitGroup
+
+	wg.Add(probes)
+	for range probes {
+		go func() {
+			defer wg.Done()
+			<-start
+			if cb.Allow() {
+				atomic.AddInt32(&allowed, 1)
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+
+	if allowed != 1 {
+		t.Fatalf("expected exactly one probe to pass, got %d", allowed)
 	}
 }
 

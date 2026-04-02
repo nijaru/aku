@@ -147,3 +147,70 @@ func TestMiddleware(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleHTTP(t *testing.T) {
+	app := aku.New()
+	var order []string
+
+	app.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "global")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	routeMW := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "route")
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	app.HandleHTTP(
+		http.MethodGet,
+		"/metrics",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "handler")
+			w.WriteHeader(http.StatusCreated)
+		}),
+		aku.WithMiddleware(routeMW),
+		aku.WithStatus(http.StatusCreated),
+		aku.WithSummary("Metrics"),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rr := httptest.NewRecorder()
+
+	app.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d", rr.Code)
+	}
+
+	expectedOrder := []string{"global", "route", "handler"}
+	if len(order) != len(expectedOrder) {
+		t.Fatalf("expected order length %d, got %d", len(expectedOrder), len(order))
+	}
+	for i, v := range expectedOrder {
+		if order[i] != v {
+			t.Errorf("at index %d: expected %s, got %s", i, v, order[i])
+		}
+	}
+
+	doc := app.OpenAPIDocument("Test API", "1.0.0")
+	path, ok := doc.Paths["/metrics"]
+	if !ok {
+		t.Fatal("expected /metrics path in OpenAPI document")
+	}
+
+	op := path["get"]
+	if op == nil {
+		t.Fatal("expected GET operation for /metrics")
+	}
+	if op.Summary != "Metrics" {
+		t.Fatalf("expected summary Metrics, got %q", op.Summary)
+	}
+	if _, ok := op.Responses["201"]; !ok {
+		t.Fatalf("expected 201 response in OpenAPI, got %+v", op.Responses)
+	}
+}

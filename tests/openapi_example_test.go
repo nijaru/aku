@@ -50,4 +50,9 @@ func TestOpenAPI_Examples(t *testing.T) {
 	if ageProp.Example != "30" {
 		t.Errorf("expected age example '30', got %v", ageProp.Example)
 	}
+
+	if len(bodySchema.Required) != 2 || bodySchema.Required[0] != "name" ||
+		bodySchema.Required[1] != "age" {
+		t.Errorf("expected required [name age], got %v", bodySchema.Required)
+	}
 }

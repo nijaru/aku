@@ -72,11 +72,12 @@ func (c *CircuitBreakerConfig) applyDefaults() {
 type CircuitBreaker struct {
 	cfg CircuitBreakerConfig
 
-	mu       sync.Mutex
-	state    State
-	failures int
-	success  int
-	openedAt time.Time
+	mu            sync.Mutex
+	state         State
+	failures      int
+	success       int
+	openedAt      time.Time
+	probeInFlight bool
 }
 
 // NewCircuitBreaker creates a circuit breaker with the given config.
@@ -107,7 +108,11 @@ func (cb *CircuitBreaker) Allow() bool {
 	case StateOpen:
 		return false
 	case StateHalfOpen:
+		if cb.probeInFlight {
+			return false
+		}
 		// Allow exactly one probe through.
+		cb.probeInFlight = true
 		return true
 	default:
 		return false
@@ -118,6 +123,9 @@ func (cb *CircuitBreaker) Allow() bool {
 func (cb *CircuitBreaker) Record(success bool) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
+	defer func() {
+		cb.probeInFlight = false
+	}()
 
 	if success {
 		cb.onSuccess()
@@ -176,6 +184,7 @@ func (cb *CircuitBreaker) transition(next State, msg string) {
 	prev := cb.state
 	cb.state = next
 	cb.openedAt = time.Now()
+	cb.probeInFlight = false
 
 	if next == StateClosed {
 		cb.failures = 0

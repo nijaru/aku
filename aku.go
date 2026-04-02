@@ -69,33 +69,52 @@ func (a *App) Handle(method, pattern string, handler http.Handler, route *Route)
 	a.routes = append(a.routes, route)
 }
 
-// HandleHTTP registers a standard http.Handler on the application's multiplexer.
-// This is useful for integrating third-party handlers like Prometheus or health checks
-// that don't follow the typed Handler[In, Out] pattern.
-func (a *App) HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption) {
+func (a *App) handleHTTP(
+	method, pattern string,
+	handler http.Handler,
+	parentMiddleware []func(http.Handler) http.Handler,
+	opts ...RouteOption,
+) {
 	meta := defaultRouteMeta()
 	for _, opt := range opts {
 		opt(&meta)
 	}
 
-	a.mux.Handle(method+" "+pattern, handler)
+	finalHandler := wrapHandler(handler, meta.middleware)
+	finalHandler = wrapHandler(finalHandler, parentMiddleware)
+
+	a.mux.Handle(method+" "+pattern, finalHandler)
 
 	route := &Route{
 		Method:      method,
 		Pattern:     pattern,
+		Status:      meta.status,
 		Summary:     meta.summary,
 		Description: meta.description,
 		Tags:        meta.tags,
 		Internal:    meta.internal,
 		Deprecated:  meta.deprecated,
 		OperationID: meta.operationID,
+		Security:    meta.security,
+		middleware: append(
+			append([]func(http.Handler) http.Handler{}, parentMiddleware...),
+			meta.middleware...,
+		),
 	}
 	a.routes = append(a.routes, route)
 }
 
+// HandleHTTP registers a standard http.Handler on the application's multiplexer.
+// This is useful for integrating third-party handlers like Prometheus or health checks
+// that don't follow the typed Handler[In, Out] pattern. Route options such as
+// middleware, status, tags, and security are still applied.
+func (a *App) HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption) {
+	a.handleHTTP(method, pattern, handler, nil, opts...)
+}
+
 // Metrics registers a standard http.Handler for serving metrics (e.g., Prometheus).
 func (a *App) Metrics(pattern string, handler http.Handler, opts ...RouteOption) {
-	a.HandleHTTP(http.MethodGet, pattern, handler, opts...)
+	a.handleHTTP(http.MethodGet, pattern, handler, nil, opts...)
 }
 
 // WS satisfies the Router interface for WebSockets.

@@ -156,63 +156,65 @@ func Generate(
 			Security:    r.GetSecurity(),
 		}
 
-		// Parameters (path, query, header)
+		// Parameters (path, query, header) and request bodies.
 		schema := r.GetSchema()
-		for _, p := range schema.Parameters {
-			if p.In == "form" || p.In == "context" {
-				continue // form handled below, context is internal
-			}
-			ps := g.reflectToSchema(p.Type)
-			g.applyValidation(&ps, p.Validate)
-			if p.Example != "" {
-				ps.Example = p.Example
-			}
-			required := p.Required
-			if p.In == "path" {
-				required = true
-			}
-			op.Parameters = append(op.Parameters, Parameter{
-				Name:     p.Name,
-				In:       p.In,
-				Required: required,
-				Schema:   ps,
-			})
-		}
-
-		// Request Body (JSON or Form)
-		if schema.Body != nil {
-			op.RequestBody = &RequestBody{
-				Content: map[string]MediaType{
-					"application/json": {
-						Schema: g.reflectToSchema(schema.Body),
-					},
-				},
-			}
-		}
-
-		// Collect Form parameters into a multipart/form-data body
-		formProps := make(map[string]Schema)
-		var formRequired []string
-		for _, p := range schema.Parameters {
-			if p.In == "form" {
+		if schema != nil {
+			for _, p := range schema.Parameters {
+				if p.In == "form" || p.In == "context" {
+					continue // form handled below, context is internal
+				}
 				ps := g.reflectToSchema(p.Type)
 				g.applyValidation(&ps, p.Validate)
-				formProps[p.Name] = ps
-				if p.Required {
-					formRequired = append(formRequired, p.Name)
+				if p.Example != "" {
+					ps.Example = p.Example
+				}
+				required := p.Required
+				if p.In == "path" {
+					required = true
+				}
+				op.Parameters = append(op.Parameters, Parameter{
+					Name:     p.Name,
+					In:       p.In,
+					Required: required,
+					Schema:   ps,
+				})
+			}
+
+			// Request Body (JSON or Form)
+			if schema.Body != nil {
+				op.RequestBody = &RequestBody{
+					Content: map[string]MediaType{
+						"application/json": {
+							Schema: g.reflectToSchema(schema.Body),
+						},
+					},
 				}
 			}
-		}
-		if len(formProps) > 0 {
-			if op.RequestBody == nil {
-				op.RequestBody = &RequestBody{Content: make(map[string]MediaType)}
+
+			// Collect Form parameters into a multipart/form-data body
+			formProps := make(map[string]Schema)
+			var formRequired []string
+			for _, p := range schema.Parameters {
+				if p.In == "form" {
+					ps := g.reflectToSchema(p.Type)
+					g.applyValidation(&ps, p.Validate)
+					formProps[p.Name] = ps
+					if p.Required {
+						formRequired = append(formRequired, p.Name)
+					}
+				}
 			}
-			op.RequestBody.Content["multipart/form-data"] = MediaType{
-				Schema: Schema{
-					Type:       "object",
-					Properties: formProps,
-					Required:   formRequired,
-				},
+			if len(formProps) > 0 {
+				if op.RequestBody == nil {
+					op.RequestBody = &RequestBody{Content: make(map[string]MediaType)}
+				}
+				op.RequestBody.Content["multipart/form-data"] = MediaType{
+					Schema: Schema{
+						Type:       "object",
+						Properties: formProps,
+						Required:   formRequired,
+					},
+				}
 			}
 		}
 
@@ -420,6 +422,9 @@ func (g *generator) buildStructSchema(t reflect.Type) Schema {
 		g.applyValidation(&propSchema, f.Tag.Get("validate"))
 		if ex := f.Tag.Get("example"); ex != "" {
 			propSchema.Example = ex
+		}
+		if f.Type.Kind() != reflect.Pointer {
+			s.Required = append(s.Required, name)
 		}
 		s.Properties[name] = propSchema
 	}

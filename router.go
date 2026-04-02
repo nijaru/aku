@@ -30,6 +30,14 @@ type Router interface {
 	WS(pattern string, handler any, opts ...RouteOption) error
 }
 
+func wrapHandler(handler http.Handler, middleware []func(http.Handler) http.Handler) http.Handler {
+	finalHandler := handler
+	for i := len(middleware) - 1; i >= 0; i-- {
+		finalHandler = middleware[i](finalHandler)
+	}
+	return finalHandler
+}
+
 // Get registers a new GET route on the router.
 func Get[In any, Out any](
 	r Router,
@@ -245,16 +253,9 @@ func register[In any, Out any](
 	})
 
 	// Apply route-local middleware, then group middleware.
-	var finalHandler http.Handler = h
-	// Route-local first (innermost)
-	for i := len(meta.middleware) - 1; i >= 0; i-- {
-		finalHandler = meta.middleware[i](finalHandler)
-	}
-	// Group middleware (outer)
+	finalHandler := wrapHandler(h, meta.middleware)
 	groupMW := r.Middleware()
-	for i := len(groupMW) - 1; i >= 0; i-- {
-		finalHandler = groupMW[i](finalHandler)
-	}
+	finalHandler = wrapHandler(finalHandler, groupMW)
 
 	fullPattern := r.Prefix() + pattern
 	route := &Route{

@@ -41,11 +41,12 @@ func BenchmarkAku(b *testing.B) {
 	aku.Get(app, "/test/{id}", benchHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
-	w := httptest.NewRecorder()
+	w := newBenchmarkResponseWriter()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
+		w.reset()
 		app.ServeHTTP(w, req)
 	}
 }
@@ -59,8 +60,9 @@ func BenchmarkAkuParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
-		w := httptest.NewRecorder()
+		w := newBenchmarkResponseWriter()
 		for pb.Next() {
+			w.reset()
 			app.ServeHTTP(w, req)
 		}
 	})
@@ -80,11 +82,12 @@ func BenchmarkAkuHandleHTTP(b *testing.B) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/test/123", nil)
-	w := httptest.NewRecorder()
+	w := newBenchmarkResponseWriter()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
+		w.reset()
 		app.ServeHTTP(w, req)
 	}
 }
@@ -112,11 +115,12 @@ func BenchmarkStdlib(b *testing.B) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
-	w := httptest.NewRecorder()
+	w := newBenchmarkResponseWriter()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
+		w.reset()
 		mux.ServeHTTP(w, req)
 	}
 }
@@ -147,8 +151,9 @@ func BenchmarkStdlibParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		req := httptest.NewRequest(http.MethodGet, "/test/123?filter=active&page=1", nil)
-		w := httptest.NewRecorder()
+		w := newBenchmarkResponseWriter()
 		for pb.Next() {
+			w.reset()
 			mux.ServeHTTP(w, req)
 		}
 	})

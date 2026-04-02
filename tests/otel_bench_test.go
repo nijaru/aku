@@ -20,11 +20,12 @@ func BenchmarkOTelMiddleware(b *testing.B) {
 	})
 
 	req := httptest.NewRequest("GET", "/bench", nil)
-	w := httptest.NewRecorder()
+	w := newBenchmarkResponseWriter()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		w.reset()
 		app.ServeHTTP(w, req)
 	}
 }
@@ -39,11 +40,12 @@ func BenchmarkOTelPerRoute(b *testing.B) {
 	}, aku.WithMiddleware(mw))
 
 	req := httptest.NewRequest("GET", "/bench", nil)
-	w := httptest.NewRecorder()
+	w := newBenchmarkResponseWriter()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		w.reset()
 		app.ServeHTTP(w, req)
 	}
 }
@@ -56,11 +58,12 @@ func BenchmarkNoOTel(b *testing.B) {
 	})
 
 	req := httptest.NewRequest("GET", "/bench", nil)
-	w := httptest.NewRecorder()
+	w := newBenchmarkResponseWriter()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		w.reset()
 		app.ServeHTTP(w, req)
 	}
 }

@@ -128,6 +128,30 @@ aku.Post(app, "/secure", MyHandler,
 )
 ```
 
+## Standard Handler Escape Hatches
+
+Aku keeps `http.Handler` compatibility for endpoints that do not need a typed request struct.
+`HandleHTTP` registers any standard handler with route metadata and middleware, while `Metrics`
+is a shorthand for read-only GET endpoints such as `/metrics`.
+
+```go
+app.HandleHTTP(
+    http.MethodGet,
+    "/healthz",
+    http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusNoContent)
+    }),
+    aku.WithSummary("Health check"),
+)
+
+app.Metrics("/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+}))
+```
+
+These routes still participate in application, group, and route middleware, and they still feed
+OpenAPI metadata.
+
 ## Testing
 
 Aku's integration tests live in `tests/` and use repo-local helpers in

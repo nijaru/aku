@@ -56,3 +56,59 @@ func TestGroup(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupHandleHTTP(t *testing.T) {
+	app := aku.New()
+	var order []string
+
+	app.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "global")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	group := app.Group("/v1", func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "group")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	routeMW := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "route")
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	group.HandleHTTP(
+		http.MethodGet,
+		"/metrics",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			order = append(order, "handler")
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		aku.WithMiddleware(routeMW),
+		aku.WithStatus(http.StatusNoContent),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/metrics", nil)
+	rr := httptest.NewRecorder()
+
+	app.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 No Content, got %d", rr.Code)
+	}
+
+	expectedOrder := []string{"global", "group", "route", "handler"}
+	if len(order) != len(expectedOrder) {
+		t.Fatalf("expected order length %d, got %d", len(expectedOrder), len(order))
+	}
+	for i, v := range expectedOrder {
+		if order[i] != v {
+			t.Errorf("at index %d: expected %s, got %s", i, v, order[i])
+		}
+	}
+}
