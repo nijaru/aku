@@ -2,6 +2,8 @@ package aku_test
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/nijaru/aku"
@@ -10,7 +12,15 @@ import (
 
 func TestStaticSPA(t *testing.T) {
 	app := aku.New()
-	spaDir := "spa"
+
+	spaDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(spaDir, "style.css"), []byte("css\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(spaDir, "index.html"), []byte("index\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	app.Static("/app/", spaDir, aku.WithSPA())
 
 	t.Run("Serves existing file", func(t *testing.T) {
