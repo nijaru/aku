@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+files="$(git diff --cached --name-only --diff-filter=ACMR -- '*.go' | tr '\n' ' ')"
+if [ -z "$files" ]; then
+	exit 0
+fi
+
+make fmt-files FILES="$files"
+git add -- $files

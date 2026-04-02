@@ -71,9 +71,20 @@ func main() {
 	app.SwaggerUI("/docs", "/openapi.json")
 
 	log.Println("Serving on :8080")
-	log.Fatal(http.ListenAndServe(":8080", app))
+log.Fatal(http.ListenAndServe(":8080", app))
 }
 ```
+
+## Development
+
+Use the repo-local hook setup to keep Go formatting out of commits:
+
+```bash
+make hooks
+```
+
+That configures Git to run `.githooks/pre-commit`, which formats staged Go
+files before the commit is created.
 
 ## Request Extraction
 
