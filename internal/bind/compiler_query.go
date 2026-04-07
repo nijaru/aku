@@ -6,13 +6,122 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"strings"
 	"time"
 )
+
+type scalarQueryStep struct {
+	fieldIdx int
+	name     string
+	coercer  Coercer
+	required bool
+}
+
+func rawQueryLookup(raw, key string) string {
+	for raw != "" {
+		var pair string
+		if i := strings.IndexByte(raw, '&'); i >= 0 {
+			pair, raw = raw[:i], raw[i+1:]
+		} else {
+			pair, raw = raw, ""
+		}
+		k, v, _ := strings.Cut(pair, "=")
+		if k == key {
+			val, _ := url.QueryUnescape(v)
+			return val
+		}
+	}
+	return ""
+}
+
+func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]struct{}, []Parameter) {
+	var steps []scalarQueryStep
+	var params []Parameter
+	names := make(map[string]struct{})
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		tag := field.Tag.Get("query")
+		if tag == "" {
+			continue
+		}
+
+		if field.Type.Kind() == reflect.Slice || field.Type.Kind() == reflect.Map {
+			return nil, nil, nil
+		}
+
+		fTyp := field.Type
+		for fTyp.Kind() == reflect.Pointer {
+			fTyp = fTyp.Elem()
+		}
+
+		isBinder := fTyp.Implements(binderType) || reflect.PointerTo(fTyp).Implements(binderType)
+		isText := fTyp.Implements(textUnmarshalerType) ||
+			reflect.PointerTo(fTyp).Implements(textUnmarshalerType)
+
+		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeFor[time.Time]() && !isBinder &&
+			!isText {
+			return nil, nil, nil
+		}
+
+		steps = append(steps, scalarQueryStep{
+			fieldIdx: i,
+			name:     tag,
+			coercer:  PrecompileCoercer(field.Type),
+			required: field.Type.Kind() != reflect.Pointer,
+		})
+		names[tag] = struct{}{}
+		params = append(params, Parameter{
+			Name:     tag,
+			In:       "query",
+			Type:     field.Type,
+			Required: field.Type.Kind() != reflect.Pointer,
+			Validate: field.Tag.Get("validate"),
+			Message:  field.Tag.Get("msg"),
+			Example:  field.Tag.Get("example"),
+		})
+	}
+
+	return steps, names, params
+}
 
 // compileQuery creates an internalExtractor for the Query section of the request struct.
 func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parameter) {
 	if typ.Kind() != reflect.Struct {
 		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error { return nil }, nil
+	}
+
+	if scalarSteps, scalarNames, params := tryCompileScalarQuery(typ); scalarSteps != nil {
+		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
+			section := v.Field(sectionIdx)
+			raw := r.URL.RawQuery
+
+			for _, step := range scalarSteps {
+				val := rawQueryLookup(raw, step.name)
+				if val != "" {
+					if err := step.coercer(val, section.Field(step.fieldIdx)); err != nil {
+						return &BindError{Field: step.name, Source: "query", Err: err}
+					}
+				} else if step.required {
+					return &BindError{Field: step.name, Source: "query", Err: fmt.Errorf("is required")}
+				}
+			}
+
+			if cfg.StrictQuery {
+				query := r.URL.Query()
+				for k := range query {
+					if _, ok := scalarNames[k]; !ok {
+						return &BindError{
+							Field:  k,
+							Source: "query",
+							Err:    fmt.Errorf("unknown parameter"),
+						}
+					}
+				}
+			}
+
+			return nil
+		}, params
 	}
 
 	steps, params := compileQueryLevel(typ, "")

@@ -1,7 +1,7 @@
 .PHONY: fmt fmt-check fmt-files hooks test build check
 
 fmt:
-	@files="$$(git ls-files '*.go')"; \
+	@files="$$(git ls-files -z '*.go' | tr '\0' ' ')"; \
 	if [ -z "$$files" ]; then \
 		echo "no tracked Go files to format"; \
 	else \
