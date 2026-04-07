@@ -3,7 +3,7 @@ package bind_test
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -20,7 +20,7 @@ type ValidationRequest struct {
 
 func (v *ValidationRequest) Validate() error {
 	if v.Body.Age < 18 {
-		return fmt.Errorf("age must be at least 18")
+		return errors.New("age must be at least 18")
 	}
 	return nil
 }

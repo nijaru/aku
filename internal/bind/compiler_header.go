@@ -2,7 +2,7 @@ package bind
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 	"reflect"
 	"slices"
@@ -43,7 +43,7 @@ func compileHeader(sectionIdx int, typ reflect.Type) (internalExtractor, []Param
 					return &BindError{
 						Field:  k,
 						Source: "header",
-						Err:    fmt.Errorf("unknown parameter"),
+						Err:    errors.New("unknown parameter"),
 					}
 				}
 			}

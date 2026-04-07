@@ -2,6 +2,7 @@ package bind
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -135,7 +136,7 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 						return &BindError{
 							Field:  step.paramKey,
 							Source: "auth",
-							Err:    fmt.Errorf("missing bearer token"),
+							Err:    errors.New("missing bearer token"),
 						}
 					}
 					continue
@@ -146,7 +147,7 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 						return &BindError{
 							Field:  step.paramKey,
 							Source: "auth",
-							Err:    fmt.Errorf("invalid authorization scheme, expected Bearer"),
+							Err:    errors.New("invalid authorization scheme, expected Bearer"),
 						}
 					}
 					continue
@@ -157,7 +158,7 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 						return &BindError{
 							Field:  step.paramKey,
 							Source: "auth",
-							Err:    fmt.Errorf("empty bearer token"),
+							Err:    errors.New("empty bearer token"),
 						}
 					}
 					continue
@@ -196,7 +197,7 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 						return &BindError{
 							Field:  step.paramKey,
 							Source: "auth",
-							Err:    fmt.Errorf("missing API key"),
+							Err:    errors.New("missing API key"),
 						}
 					}
 					continue

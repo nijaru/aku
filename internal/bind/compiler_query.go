@@ -2,7 +2,7 @@ package bind
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -103,7 +103,7 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 						return &BindError{Field: step.name, Source: "query", Err: err}
 					}
 				} else if step.required {
-					return &BindError{Field: step.name, Source: "query", Err: fmt.Errorf("is required")}
+					return &BindError{Field: step.name, Source: "query", Err: errors.New("is required")}
 				}
 			}
 
@@ -114,7 +114,7 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 						return &BindError{
 							Field:  k,
 							Source: "query",
-							Err:    fmt.Errorf("unknown parameter"),
+							Err:    errors.New("unknown parameter"),
 						}
 					}
 				}
@@ -147,7 +147,7 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 					return &BindError{
 						Field:  k,
 						Source: "query",
-						Err:    fmt.Errorf("unknown parameter"),
+						Err:    errors.New("unknown parameter"),
 					}
 				}
 			}
@@ -256,7 +256,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 							f.Set(slice)
 						}
 					} else if isRequired {
-						return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("is required")}
+						return &BindError{Field: fieldName, Source: "query", Err: errors.New("is required")}
 					}
 					return nil
 				},
@@ -287,7 +287,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 				if found {
 					v.Field(fieldIdx).Set(m)
 				} else if isRequired {
-					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("is required")}
+					return &BindError{Field: fieldName, Source: "query", Err: errors.New("is required")}
 				}
 				return nil
 			})
@@ -306,7 +306,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 						}
 					}
 				} else if isRequired {
-					return &BindError{Field: fieldName, Source: "query", Err: fmt.Errorf("is required")}
+					return &BindError{Field: fieldName, Source: "query", Err: errors.New("is required")}
 				}
 				return nil
 			})

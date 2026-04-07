@@ -2,6 +2,7 @@ package bind
 
 import (
 	"encoding"
+	"errors"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -48,7 +49,7 @@ func PrecompileCoercer(typ reflect.Type) Coercer {
 	if reflect.PointerTo(typ).Implements(textUnmarshalerType) {
 		return func(s string, v reflect.Value) error {
 			if !v.CanAddr() {
-				return fmt.Errorf("cannot address value to call UnmarshalText")
+				return errors.New("cannot address value to call UnmarshalText")
 			}
 			return v.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(s))
 		}
@@ -63,7 +64,7 @@ func PrecompileCoercer(typ reflect.Type) Coercer {
 	if reflect.PointerTo(typ).Implements(binderType) {
 		return func(s string, v reflect.Value) error {
 			if !v.CanAddr() {
-				return fmt.Errorf("cannot address value to call UnmarshalAku")
+				return errors.New("cannot address value to call UnmarshalAku")
 			}
 			return v.Addr().Interface().(Binder).UnmarshalAku(s)
 		}
@@ -104,7 +105,7 @@ func PrecompileCoercer(typ reflect.Type) Coercer {
 				return fmt.Errorf("invalid integer: %w", err)
 			}
 			if v.OverflowInt(i) {
-				return fmt.Errorf("integer overflow")
+				return errors.New("integer overflow")
 			}
 			v.SetInt(i)
 			return nil
@@ -125,7 +126,7 @@ func PrecompileCoercer(typ reflect.Type) Coercer {
 				return fmt.Errorf("invalid float: %w", err)
 			}
 			if v.OverflowFloat(f) {
-				return fmt.Errorf("float overflow")
+				return errors.New("float overflow")
 			}
 			v.SetFloat(f)
 			return nil
