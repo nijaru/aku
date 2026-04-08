@@ -275,6 +275,9 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 							consumed[k] = struct{}{}
 						}
 						key := k[len(prefix) : len(k)-1]
+						if len(vals) == 0 {
+							continue
+						}
 						val := vals[0] // take first for map
 						valVal := reflect.New(mapTyp.Elem()).Elem()
 						if err := elemCoercer(val, valVal); err != nil {

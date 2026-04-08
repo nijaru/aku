@@ -189,7 +189,7 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 				case "header":
 					val = r.Header.Get(step.paramKey)
 				case "query":
-					val = r.URL.Query().Get(step.paramKey)
+					val = rawQueryLookup(r.URL.RawQuery, step.paramKey)
 				}
 
 				if val == "" {

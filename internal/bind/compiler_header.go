@@ -171,7 +171,7 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 		} else if isMap {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
 			mapTyp := field.Type
-			isPrefix := fieldName[len(fieldName)-1] == '-'
+			isPrefix := len(fieldName) > 0 && fieldName[len(fieldName)-1] == '-'
 			steps = append(steps, func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
 				m := reflect.MakeMap(mapTyp)
 				found := false
@@ -180,6 +180,9 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 						if len(k) > len(fieldName) && strings.EqualFold(k[:len(fieldName)], fieldName) {
 							if consumed != nil {
 								consumed[k] = struct{}{}
+							}
+							if len(vals) == 0 {
+								continue
 							}
 							key := k[len(fieldName):]
 							val := vals[0]
@@ -195,6 +198,9 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 						if len(k) > len(mapPrefix)+1 && strings.EqualFold(k[:len(mapPrefix)], mapPrefix) && k[len(k)-1] == ']' {
 							if consumed != nil {
 								consumed[k] = struct{}{}
+							}
+							if len(vals) == 0 {
+								continue
 							}
 							key := k[len(mapPrefix) : len(k)-1]
 							val := vals[0]
