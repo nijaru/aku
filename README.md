@@ -1,13 +1,13 @@
 # Aku
 
 > [!IMPORTANT]
-> **Aku** is a high-performance, typesafe web framework for Go 1.22+ designed specifically for building APIs.
+> **Aku** is a high-performance, typesafe web framework for the latest stable Go release, currently Go 1.26.3, designed specifically for building APIs.
 
 Aku bridges the gap between the standard library's `net/http` and the ergonomics of modern frameworks like FastAPI or Axum. It uses Go's type system to automate request extraction, validation, and documentation without sacrificing compatibility.
 
 ## Features
 
-- **Standard Library First**: Built on Go 1.22+ `http.ServeMux`. Pure `http.Handler` compatibility.
+- **Standard Library First**: Built on `net/http` and Go's modern `http.ServeMux`. Pure `http.Handler` compatibility.
 - **Typesafe Extraction**: Automatically map Path, Query, Header, Form, and Body into a single request struct.
 - **Zero-Reflect Hot Path**: Reflection is used at registration time to "compile" extraction plans; the request path is optimized for performance.
 - **Automatic OpenAPI 3.0**: Generates documentation, including schemas and security requirements, from your Go types.
@@ -76,6 +76,11 @@ func main() {
 ```
 
 ## Development
+
+Aku targets the latest stable Go toolchain. The module currently requires Go
+1.26.3 so the framework can use current standard-library APIs and runtime
+improvements. Some underlying HTTP semantics come from Go 1.22-era `ServeMux`,
+but older toolchains are not a supported build target.
 
 Use the repo-local hook setup to keep Go formatting out of commits:
 

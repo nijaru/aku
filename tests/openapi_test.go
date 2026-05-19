@@ -29,7 +29,8 @@ func GetUser(ctx context.Context, in UserRequest) (*UserResponse, error) {
 
 func TestOpenAPI(t *testing.T) {
 	app := aku.New()
-	aku.Get(app, "/users/{id}", GetUser,
+	aku.Get(
+		app, "/users/{id}", GetUser,
 		aku.WithSummary("Get a user"),
 		aku.WithDescription("Returns a user by their ID"),
 		aku.WithTags("Users"),

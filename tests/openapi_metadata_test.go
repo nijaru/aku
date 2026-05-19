@@ -20,7 +20,8 @@ func TestOpenAPIMetadata(t *testing.T) {
 	}
 
 	// Normal route
-	aku.Get(app, "/normal", h,
+	aku.Get(
+		app, "/normal", h,
 		aku.WithSummary("Normal Summary"),
 		aku.WithDescription("Normal Description"),
 		aku.WithOperationID("normalOp"),
@@ -28,13 +29,15 @@ func TestOpenAPIMetadata(t *testing.T) {
 	)
 
 	// Deprecated route
-	aku.Get(app, "/deprecated", h,
+	aku.Get(
+		app, "/deprecated", h,
 		aku.WithDeprecated(),
 		aku.WithOperationID("depOp"),
 	)
 
 	// Internal route (should be hidden)
-	aku.Get(app, "/internal", h,
+	aku.Get(
+		app, "/internal", h,
 		aku.WithInternal(),
 	)
 

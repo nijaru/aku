@@ -162,7 +162,8 @@ func WS[In any, Msg any](
 		Schema:      schema,
 		middleware: append(
 			append([]func(http.Handler) http.Handler{}, groupMW...),
-			meta.middleware...),
+			meta.middleware...,
+		),
 	}
 
 	r.Handle("GET", pattern, finalHandler, route)

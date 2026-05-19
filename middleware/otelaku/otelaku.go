@@ -72,7 +72,8 @@ func Middleware(opts ...Option) func(http.Handler) http.Handler {
 				}
 			}
 
-			ctx, span := c.tracer.Start(ctx, spanName,
+			ctx, span := c.tracer.Start(
+				ctx, spanName,
 				trace.WithSpanKind(trace.SpanKindServer),
 			)
 			defer span.End()

@@ -34,7 +34,8 @@ func main() {
 	})
 
 	// Apply security metadata to route
-	aku.Get(app, "/secure", SecureHandler,
+	aku.Get(
+		app, "/secure", SecureHandler,
 		aku.WithSecurityName("BearerAuth"),
 		aku.WithSummary("A secure endpoint"),
 		aku.WithTag("Authentication"),

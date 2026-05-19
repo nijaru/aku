@@ -273,7 +273,8 @@ func register[In any, Out any](
 		OutputType:  outType,
 		middleware: append(
 			append([]func(http.Handler) http.Handler{}, groupMW...),
-			meta.middleware...),
+			meta.middleware...,
+		),
 	}
 
 	// Auto-register security schemes from auth extraction.
