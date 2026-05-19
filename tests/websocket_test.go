@@ -10,6 +10,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/middleware"
 )
 
 type WSHandshake struct {
@@ -24,6 +25,7 @@ type WSMessage struct {
 
 func TestWebsocket(t *testing.T) {
 	app := aku.New()
+	app.Use(middleware.Logger)
 
 	aku.WS(
 		app,

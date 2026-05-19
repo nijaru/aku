@@ -1,6 +1,7 @@
 package aku
 
 import (
+	"html/template"
 	"net/http"
 	"sync"
 
@@ -49,17 +50,17 @@ func (a *App) RedocUI(pattern, specURL string) {
 func (a *App) OpenAPIHandler(title, version string) http.Handler {
 	var (
 		cache     []byte
+		cacheErr  error
 		cacheOnce sync.Once
 	)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var err error
 		cacheOnce.Do(func() {
 			doc := a.OpenAPIDocument(title, version)
-			cache, err = doc.JSON()
+			cache, cacheErr = doc.JSON()
 		})
 
-		if err != nil {
+		if cacheErr != nil {
 			http.Error(w, "Failed to generate OpenAPI spec", http.StatusInternalServerError)
 			return
 		}
@@ -73,6 +74,8 @@ func (a *App) OpenAPIHandler(title, version string) http.Handler {
 // SwaggerUIHandler returns an http.Handler that serves the Swagger UI.
 // The specURL is the URL where the OpenAPI JSON is served (e.g., "/openapi.json").
 func (a *App) SwaggerUIHandler(specURL string) http.Handler {
+	escapedSpecURL := template.JSEscapeString(specURL)
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		html := `<!DOCTYPE html>
 <html lang="en">
@@ -93,7 +96,7 @@ func (a *App) SwaggerUIHandler(specURL string) http.Handler {
     <script>
     window.onload = function() {
       const ui = SwaggerUIBundle({
-        url: "` + specURL + `",
+        url: "` + escapedSpecURL + `",
         dom_id: '#swagger-ui',
         deepLinking: true,
         presets: [
@@ -116,6 +119,8 @@ func (a *App) SwaggerUIHandler(specURL string) http.Handler {
 // RedocUIHandler returns an http.Handler that serves the Redoc UI.
 // The specURL is the URL where the OpenAPI JSON is served (e.g., "/openapi.json").
 func (a *App) RedocUIHandler(specURL string) http.Handler {
+	escapedSpecURL := template.HTMLEscapeString(specURL)
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		html := `<!DOCTYPE html>
 <html lang="en">
@@ -127,7 +132,7 @@ func (a *App) RedocUIHandler(specURL string) http.Handler {
     <style>body { margin: 0; padding: 0; }</style>
 </head>
 <body>
-    <redoc spec-url="` + specURL + `"></redoc>
+    <redoc spec-url="` + escapedSpecURL + `"></redoc>
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"> </script>
 </body>
 </html>`

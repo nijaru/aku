@@ -28,7 +28,6 @@ type Router interface {
 	Middleware() []func(http.Handler) http.Handler
 	Static(prefix, root string, opts ...RouteOption)
 	StaticFS(prefix string, fs http.FileSystem, opts ...RouteOption)
-	WS(pattern string, handler any, opts ...RouteOption) error
 }
 
 func wrapHandler(handler http.Handler, middleware []func(http.Handler) http.Handler) http.Handler {
@@ -123,8 +122,12 @@ func register[In any, Out any](
 	// Pre-determine response type for optimization.
 	outType := reflect.TypeFor[Out]()
 	isReader := outType.Implements(reflect.TypeFor[io.Reader]())
-	isStream := outType == reflect.TypeFor[Stream]()
-	isSSE := outType == reflect.TypeFor[SSE]()
+	baseOutType := outType
+	for baseOutType.Kind() == reflect.Pointer {
+		baseOutType = baseOutType.Elem()
+	}
+	isStream := baseOutType == reflect.TypeFor[Stream]()
+	isSSE := baseOutType == reflect.TypeFor[SSE]()
 
 	// Type to cache the reflect.Value and pointer together.
 	type PooledIn struct {
@@ -219,12 +222,38 @@ func register[In any, Out any](
 			return
 		}
 		if isStream {
-			s := any(out).(Stream)
+			s, ok := streamResponse(out)
+			if !ok {
+				handleError(
+					app,
+					w,
+					r,
+					problem.Problemf(
+						http.StatusInternalServerError,
+						"Internal Server Error",
+						"stream response is nil",
+					),
+				)
+				return
+			}
 			render.Reader(w, meta.status, s.Reader, s.ContentType)
 			return
 		}
 		if isSSE {
-			sse := any(out).(SSE)
+			sse, ok := sseResponse(out)
+			if !ok {
+				handleError(
+					app,
+					w,
+					r,
+					problem.Problemf(
+						http.StatusInternalServerError,
+						"Internal Server Error",
+						"sse response is nil",
+					),
+				)
+				return
+			}
 			events := make(chan render.SSEEvent)
 			go func() {
 				defer close(events)
@@ -354,4 +383,32 @@ func formatBytes(n, unit int64, suffix string) string {
 	quo := n / unit
 	rem := (n % unit * 10) / unit
 	return strconv.FormatInt(quo, 10) + "." + strconv.FormatInt(rem, 10) + " " + suffix
+}
+
+func streamResponse(out any) (Stream, bool) {
+	switch s := out.(type) {
+	case Stream:
+		return s, true
+	case *Stream:
+		if s == nil {
+			return Stream{}, false
+		}
+		return *s, true
+	default:
+		return Stream{}, false
+	}
+}
+
+func sseResponse(out any) (SSE, bool) {
+	switch s := out.(type) {
+	case SSE:
+		return s, true
+	case *SSE:
+		if s == nil {
+			return SSE{}, false
+		}
+		return *s, true
+	default:
+		return SSE{}, false
+	}
 }

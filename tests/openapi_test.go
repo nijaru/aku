@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nijaru/aku"
@@ -103,8 +106,8 @@ func TestOpenAPI_Advanced(t *testing.T) {
 		}
 	}
 
-	aku.Post(app, "/advanced", func(ctx context.Context, in AdvancedRequest) (aku.SSE, error) {
-		return aku.SSE{}, nil
+	aku.Post(app, "/advanced", func(ctx context.Context, in AdvancedRequest) (*aku.SSE, error) {
+		return &aku.SSE{}, nil
 	})
 
 	doc := app.OpenAPIDocument("Advanced API", "1.1.0")
@@ -142,5 +145,32 @@ func TestOpenAPI_Advanced(t *testing.T) {
 	res := path.Responses["200"]
 	if _, ok := res.Content["text/event-stream"]; !ok {
 		t.Errorf("expected text/event-stream response, got %v", res.Content)
+	}
+}
+
+func TestOpenAPI_UIEscapesSpecURL(t *testing.T) {
+	app := aku.New()
+	specURL := `/openapi.json";alert(1);//`
+
+	rec := httptest.NewRecorder()
+	app.SwaggerUIHandler(specURL).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/docs", nil))
+
+	if strings.Contains(rec.Body.String(), specURL) {
+		t.Fatal("Swagger UI rendered an unescaped spec URL")
+	}
+	if !strings.Contains(rec.Body.String(), `url: "/openapi.json\";alert(1);//"`) {
+		t.Fatalf(
+			"Swagger UI did not render the expected escaped JavaScript string: %s",
+			rec.Body.String(),
+		)
+	}
+
+	rec = httptest.NewRecorder()
+	app.RedocUIHandler(`/openapi.json" onload="alert(1)`).ServeHTTP(
+		rec,
+		httptest.NewRequest(http.MethodGet, "/redoc", nil),
+	)
+	if strings.Contains(rec.Body.String(), `" onload="`) {
+		t.Fatal("Redoc UI rendered an unescaped attribute value")
 	}
 }

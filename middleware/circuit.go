@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"bufio"
 	"encoding/json"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -220,9 +222,17 @@ func CircuitBreakerMiddleware(cb *CircuitBreaker) func(http.Handler) http.Handle
 				return
 			}
 
+			recorded := false
+			defer func() {
+				if !recorded {
+					cb.Record(false)
+				}
+			}()
+
 			rec := &statusCapture{ResponseWriter: w, code: http.StatusOK}
 			next.ServeHTTP(rec, r)
 			cb.Record(!cb.cfg.IsFailure(rec.code))
+			recorded = true
 		})
 	}
 }
@@ -281,4 +291,23 @@ type statusCapture struct {
 func (w *statusCapture) WriteHeader(code int) {
 	w.code = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusCapture) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *statusCapture) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	w.code = http.StatusSwitchingProtocols
+	return h.Hijack()
+}
+
+func (w *statusCapture) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nijaru/aku"
@@ -99,6 +100,33 @@ func TestRegister_Error(t *testing.T) {
 
 	if prob.InvalidParams[0].Name != "id" || prob.InvalidParams[0].In != "path" {
 		t.Errorf("unexpected invalid_param: %+v", prob.InvalidParams[0])
+	}
+}
+
+func TestRegister_RejectsTrailingJSONBody(t *testing.T) {
+	app := aku.New()
+
+	type In struct {
+		Body struct {
+			Name string `json:"name"`
+		}
+	}
+
+	aku.Post(app, "/body", func(ctx context.Context, in In) (map[string]string, error) {
+		return map[string]string{"name": in.Body.Name}, nil
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/body",
+		strings.NewReader(`{"name":"aku"}{"name":"extra"}`),
+	)
+	rr := httptest.NewRecorder()
+
+	app.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for trailing JSON body, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 

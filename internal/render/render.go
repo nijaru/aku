@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // JSON renders a success payload as JSON with the specified status code.
@@ -64,25 +65,53 @@ func SSE(w http.ResponseWriter, r *http.Request, events <-chan SSEEvent) {
 			if !ok {
 				return
 			}
-			if event.ID != "" {
-				fmt.Fprintf(w, "id: %s\n", event.ID)
+			if !writeSSEField(w, "id", event.ID) {
+				return
 			}
-			if event.Event != "" {
-				fmt.Fprintf(w, "event: %s\n", event.Event)
+			if !writeSSEField(w, "event", event.Event) {
+				return
 			}
 			if event.Data != nil {
 				switch d := event.Data.(type) {
 				case string:
-					fmt.Fprintf(w, "data: %s\n", d)
+					if !writeSSEData(w, d) {
+						return
+					}
 				case []byte:
-					fmt.Fprintf(w, "data: %s\n", string(d))
+					if !writeSSEData(w, string(d)) {
+						return
+					}
 				default:
-					b, _ := json.Marshal(d)
-					fmt.Fprintf(w, "data: %s\n", string(b))
+					b, err := json.Marshal(d)
+					if err != nil || !writeSSEData(w, string(b)) {
+						return
+					}
 				}
 			}
-			fmt.Fprintf(w, "\n")
+			if _, err := fmt.Fprint(w, "\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}
+}
+
+func writeSSEField(w io.Writer, field, value string) bool {
+	if value == "" {
+		return true
+	}
+	value = strings.NewReplacer("\r", "", "\n", "").Replace(value)
+	_, err := fmt.Fprintf(w, "%s: %s\n", field, value)
+	return err == nil
+}
+
+func writeSSEData(w io.Writer, data string) bool {
+	data = strings.ReplaceAll(data, "\r\n", "\n")
+	data = strings.ReplaceAll(data, "\r", "\n")
+	for line := range strings.SplitSeq(data, "\n") {
+		if _, err := fmt.Fprintf(w, "data: %s\n", line); err != nil {
+			return false
+		}
+	}
+	return true
 }

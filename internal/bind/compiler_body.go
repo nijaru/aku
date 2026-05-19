@@ -3,6 +3,8 @@ package bind
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"reflect"
 )
@@ -14,7 +16,15 @@ func compileBody(sectionIdx int, typ reflect.Type) internalExtractor {
 			return nil
 		}
 		section := v.Field(sectionIdx)
-		if err := json.NewDecoder(r.Body).Decode(section.Addr().Interface()); err != nil {
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(section.Addr().Interface()); err != nil {
+			return &BindError{Source: "body", Err: err}
+		}
+		var extra any
+		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+			if err == nil {
+				err = errors.New("body must contain a single JSON value")
+			}
 			return &BindError{Source: "body", Err: err}
 		}
 		return nil

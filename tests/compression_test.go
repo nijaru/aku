@@ -128,6 +128,30 @@ func TestCompressionMiddleware(t *testing.T) {
 		}
 	})
 
+	t.Run("BrotliDisabledByQuality", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Accept-Encoding", "br;q=0, gzip")
+		rec := httptest.NewRecorder()
+
+		app.ServeHTTP(rec, req)
+
+		if rec.Header().Get("Content-Encoding") == "br" {
+			t.Fatal("brotli must not be used when Accept-Encoding sets br;q=0")
+		}
+	})
+
+	t.Run("BrotliTokenMustMatch", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Accept-Encoding", "xbr")
+		rec := httptest.NewRecorder()
+
+		app.ServeHTTP(rec, req)
+
+		if rec.Header().Get("Content-Encoding") == "br" {
+			t.Fatal("brotli must not be used for a partial encoding token match")
+		}
+	})
+
 	t.Run("NonCompressibleType", func(t *testing.T) {
 		// Register a route that returns an image (mocked)
 		aku.Get(app, "/image", func(ctx context.Context, in In) (aku.Stream, error) {

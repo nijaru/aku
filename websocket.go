@@ -127,14 +127,28 @@ func WS[In any, Msg any](
 			// websocket.Accept handles the error response if it fails.
 			return
 		}
-		defer c.Close(websocket.StatusInternalError, "unexpected disconnection")
+		closeCode := websocket.StatusInternalError
+		closeReason := "unexpected disconnection"
+		defer func() {
+			_ = c.Close(closeCode, closeReason)
+		}()
 
 		ws := &Websocket[Msg]{conn: c}
 
 		// 4. Call the user handler.
 		if err := handler(r.Context(), *in, ws); err != nil {
-			handleError(app, w, r, err)
+			if expectedWebsocketClose(err) {
+				closeCode = websocket.CloseStatus(err)
+				closeReason = ""
+				return
+			}
+			for _, observer := range app.errorObservers {
+				observer(r.Context(), err)
+			}
+			return
 		}
+		closeCode = websocket.StatusNormalClosure
+		closeReason = ""
 	})
 
 	// Apply middleware (outermost first).
@@ -168,4 +182,13 @@ func WS[In any, Msg any](
 
 	r.Handle("GET", pattern, finalHandler, route)
 	return nil
+}
+
+func expectedWebsocketClose(err error) bool {
+	switch websocket.CloseStatus(err) {
+	case websocket.StatusNormalClosure, websocket.StatusGoingAway:
+		return true
+	default:
+		return false
+	}
 }

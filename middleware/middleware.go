@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -155,6 +157,7 @@ func CORS(opts CORSOptions) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+			addVary(w.Header(), "Origin")
 
 			allowed := false
 			for _, o := range opts.AllowedOrigins {
@@ -171,6 +174,8 @@ func CORS(opts CORSOptions) func(http.Handler) http.Handler {
 
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			if r.Method == http.MethodOptions {
+				addVary(w.Header(), "Access-Control-Request-Method")
+				addVary(w.Header(), "Access-Control-Request-Headers")
 				if len(opts.AllowedMethods) > 0 {
 					w.Header().
 						Set("Access-Control-Allow-Methods", strings.Join(opts.AllowedMethods, ", "))
@@ -222,6 +227,19 @@ func (w *loggingResponseWriter) Flush() {
 	}
 }
 
+func (w *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	w.status = http.StatusSwitchingProtocols
+	return h.Hijack()
+}
+
+func (w *loggingResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 var brotliPool = sync.Pool{
 	New: func() any {
 		return brotli.NewWriter(nil)
@@ -238,7 +256,7 @@ func Compress(next http.Handler) http.Handler {
 		ae := r.Header.Get("Accept-Encoding")
 
 		// 1. Brotli (Custom pooled implementation)
-		if strings.Contains(ae, "br") {
+		if acceptsEncoding(ae, "br") {
 			// Check if we should compress based on content type if possible,
 			// but we often don't know it until WriteHeader is called.
 			bw := brotliPool.Get().(*brotli.Writer)
@@ -279,7 +297,7 @@ func (w *brotliResponseWriter) WriteHeader(status int) {
 	ct := w.Header().Get("Content-Type")
 	if isCompressible(ct) {
 		w.Header().Set("Content-Encoding", "br")
-		w.Header().Add("Vary", "Accept-Encoding")
+		addVary(w.Header(), "Accept-Encoding")
 		w.ResponseWriter.WriteHeader(status)
 	} else {
 		w.ResponseWriter.WriteHeader(status)
@@ -307,8 +325,20 @@ func (w *brotliResponseWriter) Flush() {
 	}
 }
 
+func (w *brotliResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return h.Hijack()
+}
+
+func (w *brotliResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 // SecurityHeadersOptions configures the SecurityHeaders middleware.
-// All fields are optional; zero-value headers are omitted.
+// Zero values keep the secure defaults. Use DisabledHeaders to omit defaults.
 type SecurityHeadersOptions struct {
 	// ContentSecurityPolicy sets the Content-Security-Policy header.
 	// Default: "default-src 'self'; object-src 'none'; base-uri 'none'"
@@ -353,6 +383,10 @@ type SecurityHeadersOptions struct {
 	// OWASP recommends "0" (disable the legacy XSS auditor, which itself had vulns).
 	// Default: "0".
 	XXSSProtection string
+
+	// DisabledHeaders omits specific default headers by canonical header name.
+	// Example: []string{"Content-Security-Policy", "X-Frame-Options"}.
+	DisabledHeaders []string
 }
 
 // SecurityHeaders returns a middleware that sets common security headers.
@@ -369,8 +403,10 @@ func SecurityHeaders(opts ...SecurityHeadersOptions) func(http.Handler) http.Han
 		XXSSProtection:            "0",
 	}
 
+	disabled := map[string]bool{}
 	if len(opts) > 0 {
 		o := opts[0]
+		disabled = disabledHeaders(o.DisabledHeaders)
 		if o.ContentSecurityPolicy != "" {
 			cfg.ContentSecurityPolicy = o.ContentSecurityPolicy
 		}
@@ -400,6 +436,33 @@ func SecurityHeaders(opts ...SecurityHeadersOptions) func(http.Handler) http.Han
 		}
 		cfg.HSTSIncludeSubDomains = o.HSTSIncludeSubDomains
 		cfg.HSTSPreload = o.HSTSPreload
+		if disabled["Strict-Transport-Security"] {
+			cfg.HSTSMaxAge = -1
+		}
+		if disabled["Content-Security-Policy"] {
+			cfg.ContentSecurityPolicy = ""
+		}
+		if disabled["X-Frame-Options"] {
+			cfg.XFrameOptions = ""
+		}
+		if disabled["Referrer-Policy"] {
+			cfg.ReferrerPolicy = ""
+		}
+		if disabled["Permissions-Policy"] {
+			cfg.PermissionsPolicy = ""
+		}
+		if disabled["Cross-Origin-Embedder-Policy"] {
+			cfg.CrossOriginEmbedderPolicy = ""
+		}
+		if disabled["Cross-Origin-Opener-Policy"] {
+			cfg.CrossOriginOpenerPolicy = ""
+		}
+		if disabled["Cross-Origin-Resource-Policy"] {
+			cfg.CrossOriginResourcePolicy = ""
+		}
+		if disabled["X-XSS-Protection"] {
+			cfg.XXSSProtection = ""
+		}
 	}
 
 	// Pre-compute the HSTS value since it doesn't change per-request.
@@ -427,7 +490,9 @@ func SecurityHeaders(opts ...SecurityHeadersOptions) func(http.Handler) http.Han
 			if cfg.XFrameOptions != "" {
 				h.Set("X-Frame-Options", cfg.XFrameOptions)
 			}
-			h.Set("X-Content-Type-Options", "nosniff")
+			if !disabled["X-Content-Type-Options"] {
+				h.Set("X-Content-Type-Options", "nosniff")
+			}
 			if cfg.ReferrerPolicy != "" {
 				h.Set("Referrer-Policy", cfg.ReferrerPolicy)
 			}
@@ -462,4 +527,61 @@ func isCompressible(ct string) bool {
 		strings.Contains(ct, "javascript") ||
 		strings.Contains(ct, "xml") ||
 		strings.Contains(ct, "html")
+}
+
+func acceptsEncoding(header, target string) bool {
+	for part := range strings.SplitSeq(header, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		coding, params, _ := strings.Cut(part, ";")
+		if !strings.EqualFold(strings.TrimSpace(coding), target) {
+			continue
+		}
+		if params == "" {
+			return true
+		}
+
+		allowed := true
+		for param := range strings.SplitSeq(params, ";") {
+			key, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+			if !ok || !strings.EqualFold(key, "q") {
+				continue
+			}
+			q, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err == nil && q <= 0 {
+				allowed = false
+			}
+		}
+		if allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func addVary(h http.Header, field string) {
+	vary := h.Get("Vary")
+	for existing := range strings.SplitSeq(vary, ",") {
+		if strings.EqualFold(strings.TrimSpace(existing), field) {
+			return
+		}
+	}
+	if vary == "" {
+		h.Set("Vary", field)
+	} else {
+		h.Set("Vary", vary+", "+field)
+	}
+}
+
+func disabledHeaders(headers []string) map[string]bool {
+	disabled := make(map[string]bool, len(headers))
+	for _, header := range headers {
+		if header = strings.TrimSpace(header); header != "" {
+			disabled[http.CanonicalHeaderKey(header)] = true
+		}
+	}
+	return disabled
 }

@@ -121,3 +121,7 @@ func (w *spaResponseWriter) Write(b []byte) (int, error) {
 	}
 	return w.ResponseWriter.Write(b)
 }
+
+func (w *spaResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}

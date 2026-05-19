@@ -233,8 +233,12 @@ func Generate(
 			outSchema := g.reflectToSchema(outputType)
 
 			// Detect streaming types
-			name := outputType.Name()
-			pkg := outputType.PkgPath()
+			baseOutputType := outputType
+			for baseOutputType.Kind() == reflect.Pointer {
+				baseOutputType = baseOutputType.Elem()
+			}
+			name := baseOutputType.Name()
+			pkg := baseOutputType.PkgPath()
 			if (name == "Reader" && pkg == "io") || (name == "ReadCloser" && pkg == "io") {
 				mediaType = "application/octet-stream"
 				outSchema = Schema{Type: "string", Format: "binary"}

@@ -79,6 +79,38 @@ func TestMiddleware_SecurityHeaders_DisabledHSTS(t *testing.T) {
 	}
 }
 
+func TestMiddleware_SecurityHeaders_DisabledHeaders(t *testing.T) {
+	app := aku.New()
+	app.Use(middleware.SecurityHeaders(middleware.SecurityHeadersOptions{
+		DisabledHeaders: []string{
+			"Content-Security-Policy",
+			"X-Frame-Options",
+			"X-Content-Type-Options",
+		},
+	}))
+
+	aku.Get(app, "/secure", func(ctx context.Context, in struct{}) (string, error) {
+		return "ok", nil
+	})
+
+	resp := testutil.Test(t, app).
+		Get("/secure").
+		Do()
+
+	for _, header := range []string{
+		"Content-Security-Policy",
+		"X-Frame-Options",
+		"X-Content-Type-Options",
+	} {
+		if resp.Header().Get(header) != "" {
+			t.Fatalf("expected %s to be disabled, got %q", header, resp.Header().Get(header))
+		}
+	}
+	if resp.Header().Get("Referrer-Policy") == "" {
+		t.Fatal("expected other default security headers to remain enabled")
+	}
+}
+
 func TestMiddleware_SecurityHeaders_NoCOEPByDefault(t *testing.T) {
 	app := aku.New()
 	app.Use(middleware.SecurityHeaders())
@@ -163,7 +195,8 @@ func TestMiddleware_CORS(t *testing.T) {
 			Get("/cors").
 			WithHeader("Origin", "http://example.com").
 			ExpectStatus(http.StatusOK).
-			ExpectHeader("Access-Control-Allow-Origin", "http://example.com")
+			ExpectHeader("Access-Control-Allow-Origin", "http://example.com").
+			ExpectHeader("Vary", "Origin")
 	})
 
 	t.Run("Invalid Origin", func(t *testing.T) {
@@ -183,6 +216,7 @@ func TestMiddleware_CORS(t *testing.T) {
 			WithHeader("Origin", "http://example.com").
 			WithHeader("Access-Control-Request-Method", "POST").
 			ExpectStatus(http.StatusNoContent).
-			ExpectHeader("Access-Control-Allow-Methods", "GET, POST")
+			ExpectHeader("Access-Control-Allow-Methods", "GET, POST").
+			ExpectHeader("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
 	})
 }

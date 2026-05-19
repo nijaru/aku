@@ -10,7 +10,8 @@ import (
 // HealthChecker manages liveness and readiness checks.
 // Safe for concurrent use.
 type HealthChecker struct {
-	Checks map[string]CheckFunc
+	mu     sync.RWMutex
+	checks map[string]CheckFunc
 }
 
 // CheckFunc defines a liveness or readiness verification.
@@ -27,13 +28,22 @@ const passedResponse = `{"status":"passed"}`
 
 // NewHealthChecker creates an empty HealthChecker.
 func NewHealthChecker() HealthChecker {
-	return HealthChecker{Checks: make(map[string]CheckFunc)}
+	return HealthChecker{checks: make(map[string]CheckFunc)}
 }
 
 // Add registers a named readiness check.
 // Panics on nil check function.
 func (hc *HealthChecker) Add(name string, fn CheckFunc) {
-	hc.Checks[name] = fn
+	if fn == nil {
+		panic("aku: nil health check")
+	}
+
+	hc.mu.Lock()
+	defer hc.mu.Unlock()
+	if hc.checks == nil {
+		hc.checks = make(map[string]CheckFunc)
+	}
+	hc.checks[name] = fn
 }
 
 // Liveness returns an http.Handler that always responds 200 OK.
@@ -50,18 +60,19 @@ func (hc *HealthChecker) Liveness() http.Handler {
 // concurrently. Responses 200 when all pass, 503 when any fail.
 func (hc *HealthChecker) Readiness() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(hc.Checks) == 0 {
+		checks := hc.snapshot()
+		if len(checks) == 0 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(passedResponse))
 			return
 		}
 
-		results := make(map[string]string, len(hc.Checks))
+		results := make(map[string]string, len(checks))
 		var mu sync.Mutex
 		var wg sync.WaitGroup
 
-		for name, check := range hc.Checks {
+		for name, check := range checks {
 			wg.Go(func() {
 				if err := check(r.Context()); err != nil {
 					mu.Lock()
@@ -100,6 +111,17 @@ func (hc *HealthChecker) Readiness() http.Handler {
 
 		_ = json.NewEncoder(w).Encode(status)
 	})
+}
+
+func (hc *HealthChecker) snapshot() map[string]CheckFunc {
+	hc.mu.RLock()
+	defer hc.mu.RUnlock()
+
+	checks := make(map[string]CheckFunc, len(hc.checks))
+	for name, check := range hc.checks {
+		checks[name] = check
+	}
+	return checks
 }
 
 // HealthyCheck is a no-op check that always passes.

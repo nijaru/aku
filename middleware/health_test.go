@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -158,4 +160,39 @@ func TestHealthyCheck(t *testing.T) {
 	if err := HealthyCheck(context.Background()); err != nil {
 		t.Fatalf("HealthyCheck should always return nil")
 	}
+}
+
+func TestHealthChecker_AddRejectsNil(t *testing.T) {
+	hc := NewHealthChecker()
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for nil health check")
+		}
+	}()
+
+	hc.Add("nil", nil)
+}
+
+func TestHealthChecker_ReadinessConcurrentAdd(t *testing.T) {
+	hc := NewHealthChecker()
+	hc.Add("initial", HealthyCheck)
+
+	handler := hc.Readiness()
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+
+	var wg sync.WaitGroup
+	for i := range 50 {
+		wg.Go(func() {
+			hc.Add("check-"+strconv.Itoa(i), HealthyCheck)
+		})
+		wg.Go(func() {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req.Clone(context.Background()))
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected 200, got %d", rec.Code)
+			}
+		})
+	}
+	wg.Wait()
 }

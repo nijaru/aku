@@ -132,15 +132,6 @@ func (a *App) Metrics(pattern string, handler http.Handler, opts ...RouteOption)
 	a.handleHTTP(http.MethodGet, pattern, handler, nil, opts...)
 }
 
-// WS satisfies the Router interface for WebSockets.
-func (a *App) WS(pattern string, handler any, opts ...RouteOption) error {
-	// This will be called by registerWS which we can also define if we want a generic helper.
-	// But actually our WS[In, Msg] function is already generic and public.
-	// To satisfy the interface we need a non-generic method that takes `any`.
-	// This is slightly tricky with Go generics.
-	panic("use aku.WS(router, pattern, handler) instead")
-}
-
 func (a *App) App() *App                                     { return a }
 func (a *App) Prefix() string                                { return "" }
 func (a *App) Middleware() []func(http.Handler) http.Handler { return nil }

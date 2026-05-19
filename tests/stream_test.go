@@ -66,6 +66,32 @@ func TestStream_StreamType(t *testing.T) {
 	}
 }
 
+func TestStream_PointerStreamType(t *testing.T) {
+	app := aku.New()
+
+	aku.Get(app, "/stream-type", func(ctx context.Context, in any) (*aku.Stream, error) {
+		return &aku.Stream{
+			Reader:      strings.NewReader("hello pointer stream"),
+			ContentType: "text/plain",
+		}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/stream-type", nil)
+	rr := httptest.NewRecorder()
+
+	app.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 OK, got %d", rr.Code)
+	}
+	if rr.Header().Get("Content-Type") != "text/plain" {
+		t.Errorf("expected text/plain, got %q", rr.Header().Get("Content-Type"))
+	}
+	if rr.Body.String() != "hello pointer stream" {
+		t.Errorf("expected pointer stream body, got %q", rr.Body.String())
+	}
+}
+
 func TestStream_SSE(t *testing.T) {
 	app := aku.New()
 
@@ -91,6 +117,48 @@ func TestStream_SSE(t *testing.T) {
 	}
 
 	expected := "data: hello\n\ndata: world\n\n"
+	if rr.Body.String() != expected {
+		t.Errorf("expected %q, got %q", expected, rr.Body.String())
+	}
+}
+
+func TestStream_PointerSSE(t *testing.T) {
+	app := aku.New()
+
+	aku.Get(app, "/events", func(ctx context.Context, in any) (*aku.SSE, error) {
+		ch := make(chan aku.Event, 1)
+		ch <- aku.Event{Data: "pointer"}
+		close(ch)
+		return &aku.SSE{Events: ch}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	rr := httptest.NewRecorder()
+
+	app.ServeHTTP(rr, req)
+
+	expected := "data: pointer\n\n"
+	if rr.Body.String() != expected {
+		t.Errorf("expected %q, got %q", expected, rr.Body.String())
+	}
+}
+
+func TestStream_SSEMultilineData(t *testing.T) {
+	app := aku.New()
+
+	aku.Get(app, "/events", func(ctx context.Context, in any) (aku.SSE, error) {
+		ch := make(chan aku.Event, 1)
+		ch <- aku.Event{ID: "a\nb", Event: "message", Data: "hello\nworld"}
+		close(ch)
+		return aku.SSE{Events: ch}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	rr := httptest.NewRecorder()
+
+	app.ServeHTTP(rr, req)
+
+	expected := "id: ab\nevent: message\ndata: hello\ndata: world\n\n"
 	if rr.Body.String() != expected {
 		t.Errorf("expected %q, got %q", expected, rr.Body.String())
 	}
