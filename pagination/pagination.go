@@ -7,15 +7,15 @@ import (
 
 // Page represents offset-based pagination.
 type Page struct {
-	Offset int `query:"offset" doc:"Number of records to skip"`
-	Limit  int `query:"limit"  doc:"Maximum number of records to return"`
+	Offset int `query:"offset" aku:"optional" doc:"Number of records to skip"`
+	Limit  int `query:"limit"  aku:"optional" doc:"Maximum number of records to return"`
 }
 
 // Cursor represents cursor-based pagination.
 type Cursor struct {
-	After  string `query:"after"  doc:"Cursor pointing to the start of the next page"`
-	Before string `query:"before" doc:"Cursor pointing to the start of the previous page"`
-	Limit  int    `query:"limit"  doc:"Maximum number of records to return"`
+	After  string `query:"after"  aku:"optional" doc:"Cursor pointing to the start of the next page"`
+	Before string `query:"before" aku:"optional" doc:"Cursor pointing to the start of the previous page"`
+	Limit  int    `query:"limit"  aku:"optional" doc:"Maximum number of records to return"`
 }
 
 // PageParams wraps Page and Limit with clamping/defaults.

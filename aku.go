@@ -27,6 +27,10 @@ type App struct {
 	securitySchemes    map[string]SecurityScheme
 	MaxMultipartMemory int64
 	ShutdownTimeout    time.Duration
+	ReadHeaderTimeout  time.Duration
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
 	bindConfig         *bind.Config
 	errorObservers     []func(context.Context, error)
 }
@@ -38,6 +42,10 @@ func New(opts ...Option) *App {
 		securitySchemes:    make(map[string]SecurityScheme),
 		MaxMultipartMemory: 32 << 20, // 32MB default
 		ShutdownTimeout:    30 * time.Second,
+		ReadHeaderTimeout:  5 * time.Second,
+		ReadTimeout:        30 * time.Second,
+		WriteTimeout:       30 * time.Second,
+		IdleTimeout:        120 * time.Second,
 		bindConfig:         &bind.Config{},
 	}
 
@@ -260,10 +268,7 @@ func (i *errorInterceptor) Flush() {
 // It listens for SIGINT and SIGTERM signals and waits for active requests to finish
 // up to the configured ShutdownTimeout.
 func (a *App) Run(addr string) error {
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: a,
-	}
+	srv := a.server(addr)
 
 	idleConnsClosed := make(chan struct{})
 	serverError := make(chan error, 1)
@@ -303,4 +308,15 @@ func (a *App) Run(addr string) error {
 	}
 
 	return nil
+}
+
+func (a *App) server(addr string) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           a,
+		ReadHeaderTimeout: a.ReadHeaderTimeout,
+		ReadTimeout:       a.ReadTimeout,
+		WriteTimeout:      a.WriteTimeout,
+		IdleTimeout:       a.IdleTimeout,
+	}
 }

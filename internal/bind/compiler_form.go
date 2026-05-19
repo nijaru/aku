@@ -2,6 +2,7 @@ package bind
 
 import (
 	"context"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"reflect"
@@ -14,10 +15,11 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 	}
 
 	type formInfo struct {
-		idx     int
-		name    string
-		isSlice bool
-		coercer Coercer
+		idx      int
+		name     string
+		isSlice  bool
+		required bool
+		coercer  Coercer
 	}
 	var infos []formInfo
 	var fileInfos []formInfo
@@ -36,7 +38,12 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 		if field.Type == fileHeaderType || field.Type == fileHeaderSliceType {
 			fileInfos = append(
 				fileInfos,
-				formInfo{idx: i, name: tag, isSlice: field.Type.Kind() == reflect.Slice},
+				formInfo{
+					idx:      i,
+					name:     tag,
+					isSlice:  field.Type.Kind() == reflect.Slice,
+					required: fieldRequired(field),
+				},
 			)
 		} else {
 			elemTyp := field.Type
@@ -44,10 +51,11 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 				elemTyp = field.Type.Elem()
 			}
 			infos = append(infos, formInfo{
-				idx:     i,
-				name:    tag,
-				isSlice: field.Type.Kind() == reflect.Slice,
-				coercer: PrecompileCoercer(elemTyp),
+				idx:      i,
+				name:     tag,
+				isSlice:  field.Type.Kind() == reflect.Slice,
+				required: fieldRequired(field),
+				coercer:  PrecompileCoercer(elemTyp),
 			})
 		}
 
@@ -55,7 +63,7 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 			Name:     tag,
 			In:       "form",
 			Type:     field.Type,
-			Required: field.Type.Kind() != reflect.Pointer,
+			Required: fieldRequired(field),
 			Validate: field.Tag.Get("validate"),
 			Message:  field.Tag.Get("msg"),
 			Example:  field.Tag.Get("example"),
@@ -85,6 +93,8 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 						}
 					}
 					f.Set(slice)
+				} else if info.required {
+					return &BindError{Field: info.name, Source: "form", Err: errors.New("is required")}
 				}
 			} else {
 				val := r.PostFormValue(info.name)
@@ -92,6 +102,8 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 					if err := info.coercer(val, section.Field(info.idx)); err != nil {
 						return &BindError{Field: info.name, Source: "form", Err: err}
 					}
+				} else if info.required {
+					return &BindError{Field: info.name, Source: "form", Err: errors.New("is required")}
 				}
 			}
 		}
@@ -111,6 +123,8 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 					} else {
 						f.Set(reflect.ValueOf(files[0]))
 					}
+				} else if info.required {
+					return &BindError{Field: info.name, Source: "form", Err: errors.New("is required")}
 				}
 			}
 		}

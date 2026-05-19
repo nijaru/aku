@@ -2,6 +2,7 @@ package bind
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"reflect"
 )
@@ -32,7 +33,7 @@ func compilePath(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 				Name:     tag,
 				In:       "path",
 				Type:     field.Type,
-				Required: field.Type.Kind() != reflect.Pointer,
+				Required: true,
 				Validate: field.Tag.Get("validate"),
 				Message:  field.Tag.Get("msg"),
 				Example:  field.Tag.Get("example"),
@@ -48,6 +49,8 @@ func compilePath(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 				if err := info.coercer(val, section.Field(info.idx)); err != nil {
 					return &BindError{Field: info.name, Source: "path", Err: err}
 				}
+			} else {
+				return &BindError{Field: info.name, Source: "path", Err: errors.New("is required")}
 			}
 		}
 		return nil

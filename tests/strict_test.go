@@ -73,6 +73,15 @@ func TestStrictHeader(t *testing.T) {
 		}
 	})
 
+	t.Run("MissingRequiredHeader", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		rr := httptest.NewRecorder()
+		app.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Errorf("expected 422, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
 	t.Run("StandardHeadersIgnored", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("X-Api-Key", "secret")

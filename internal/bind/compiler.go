@@ -71,6 +71,18 @@ func (e *BindError) Unwrap() error {
 	return e.Err
 }
 
+func fieldRequired(field reflect.StructField) bool {
+	if field.Type.Kind() == reflect.Pointer {
+		return false
+	}
+	for option := range strings.SplitSeq(field.Tag.Get("aku"), ",") {
+		if strings.TrimSpace(option) == "optional" {
+			return false
+		}
+	}
+	return true
+}
+
 // Compiler inspects a generic input type once at startup and builds
 // a static Extractor and Schema that avoids per-request reflection overhead.
 func Compiler[T any]() (Extractor[T], *Schema) {

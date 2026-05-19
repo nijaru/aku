@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"strconv"
 	"sync"
 
 	"github.com/go-playground/validator/v10"
@@ -158,6 +159,8 @@ func register[In any, Out any](
 			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
 				if bindErr.Source == "auth" {
 					handleError(app, w, r, problem.Unauthorized(bindErr.Err.Error()))
+				} else if _, ok := errors.AsType[*http.MaxBytesError](bindErr.Err); ok {
+					handleError(app, w, r, bindErr.Err)
 				} else {
 					handleError(app, w, r, problem.ValidationProblem("Request extraction or validation failed", []problem.InvalidParam{
 						{
@@ -312,8 +315,43 @@ func handleError(app *App, w http.ResponseWriter, r *http.Request, err error) {
 
 	if prob, ok := errors.AsType[*problem.Details](err); ok {
 		render.Problem(w, prob.Status, prob)
+	} else if maxBytesErr, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		render.Problem(
+			w,
+			http.StatusRequestEntityTooLarge,
+			problem.PayloadTooLarge(
+				"request body exceeds maximum allowed size of "+humanBytes(maxBytesErr.Limit),
+			),
+		)
 	} else {
 		// Default behavior for non-Problem errors
 		render.Problem(w, http.StatusInternalServerError, problem.Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error()))
 	}
+}
+
+func humanBytes(b int64) string {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+	switch {
+	case b >= gb:
+		return formatBytes(b, gb, "GB")
+	case b >= mb:
+		return formatBytes(b, mb, "MB")
+	case b >= kb:
+		return formatBytes(b, kb, "KB")
+	default:
+		return strconv.FormatInt(b, 10) + " B"
+	}
+}
+
+func formatBytes(n, unit int64, suffix string) string {
+	if n%unit == 0 {
+		return strconv.FormatInt(n/unit, 10) + " " + suffix
+	}
+	quo := n / unit
+	rem := (n % unit * 10) / unit
+	return strconv.FormatInt(quo, 10) + "." + strconv.FormatInt(rem, 10) + " " + suffix
 }

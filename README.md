@@ -119,6 +119,19 @@ type CreateProductRequest struct {
 }
 ```
 
+Non-pointer query, header, and form fields are required by default. Add
+`aku:"optional"` when a zero value is meaningful and your handler applies
+defaults:
+
+```go
+type ListProductsRequest struct {
+	Query struct {
+		Offset int `query:"offset" aku:"optional"`
+		Limit  int `query:"limit"  aku:"optional"`
+	}
+}
+```
+
 ## Middleware
 
 Use standard `func(http.Handler) http.Handler` middleware at the application or route level.
@@ -156,6 +169,30 @@ app.Metrics("/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 
 These routes still participate in application, group, and route middleware, and they still feed
 OpenAPI metadata.
+
+## Server Runtime
+
+`app.Run(addr)` creates a standard `http.Server` with bounded defaults:
+`ReadHeaderTimeout=5s`, `ReadTimeout=30s`, `WriteTimeout=30s`, and
+`IdleTimeout=120s`. For long-lived streaming endpoints, set the write timeout
+to zero or construct your own `http.Server` with `app` as the handler.
+
+```go
+app := aku.New(aku.WithServerTimeouts(aku.ServerTimeouts{
+	ReadHeader: 5 * time.Second,
+	Read:       30 * time.Second,
+	Write:      0, // allow long-lived streams
+	Idle:       120 * time.Second,
+}))
+```
+
+## Browser Applications
+
+Aku stays API-first. Browser-facing concerns such as cookie sessions, CSRF,
+HTML rendering, and template engines should be composed as standard
+`net/http` middleware or `http.Handler` routes through `Use`, `WithMiddleware`,
+and `HandleHTTP`. Aku will not force a session store, CSRF library, template
+engine, or application architecture.
 
 ## Testing
 

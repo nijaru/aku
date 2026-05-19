@@ -68,14 +68,14 @@ func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]stru
 			fieldIdx: i,
 			name:     tag,
 			coercer:  PrecompileCoercer(field.Type),
-			required: field.Type.Kind() != reflect.Pointer,
+			required: fieldRequired(field),
 		})
 		names[tag] = struct{}{}
 		params = append(params, Parameter{
 			Name:     tag,
 			In:       "query",
 			Type:     field.Type,
-			Required: field.Type.Kind() != reflect.Pointer,
+			Required: fieldRequired(field),
 			Validate: field.Tag.Get("validate"),
 			Message:  field.Tag.Get("msg"),
 			Example:  field.Tag.Get("example"),
@@ -189,6 +189,8 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 			!isText {
 			subSteps, subParams := compileQueryLevel(fTyp, name)
 			subPrefix := name + "["
+			fieldIdx := i
+			isRequired := fieldRequired(field)
 			steps = append(
 				steps,
 				func(q url.Values, v reflect.Value, consumed map[string]struct{}) error {
@@ -205,10 +207,17 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 						}
 					}
 					if !found {
+						if isRequired {
+							return &BindError{
+								Field:  name,
+								Source: "query",
+								Err:    errors.New("is required"),
+							}
+						}
 						return nil
 					}
 
-					f := v.Field(i)
+					f := v.Field(fieldIdx)
 					if f.Kind() == reflect.Pointer {
 						if f.IsNil() {
 							f.Set(reflect.New(f.Type().Elem()))
@@ -232,7 +241,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 		isMap := field.Type.Kind() == reflect.Map
 		fieldIdx := i
 		fieldName := name
-		isRequired := field.Type.Kind() != reflect.Pointer
+		isRequired := fieldRequired(field)
 
 		if isSlice {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
@@ -307,6 +316,8 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 						if err := coercer(val, v.Field(fieldIdx)); err != nil {
 							return &BindError{Field: fieldName, Source: "query", Err: err}
 						}
+					} else if isRequired {
+						return &BindError{Field: fieldName, Source: "query", Err: errors.New("is required")}
 					}
 				} else if isRequired {
 					return &BindError{Field: fieldName, Source: "query", Err: errors.New("is required")}
@@ -319,7 +330,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 			Name:     name,
 			In:       "query",
 			Type:     field.Type,
-			Required: field.Type.Kind() != reflect.Pointer,
+			Required: fieldRequired(field),
 			Validate: field.Tag.Get("validate"),
 			Message:  field.Tag.Get("msg"),
 			Example:  field.Tag.Get("example"),

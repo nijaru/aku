@@ -56,7 +56,7 @@ func TestRegister(t *testing.T) {
 func TestRegister_NoContent(t *testing.T) {
 	app := aku.New()
 
-	aku.Post(app, "/test", func(ctx context.Context, in MyInput) (any, error) {
+	aku.Post(app, "/test", func(ctx context.Context, in struct{}) (any, error) {
 		return nil, nil
 	}, aku.WithStatus(http.StatusNoContent))
 

@@ -56,6 +56,28 @@ func WithShutdownTimeout(d time.Duration) Option {
 	}
 }
 
+// ServerTimeouts configures the HTTP server created by App.Run.
+//
+// App.Run defaults to bounded production server timeouts. Set fields to zero
+// only when an endpoint intentionally needs unbounded reads or writes, such as
+// long-lived streaming.
+type ServerTimeouts struct {
+	ReadHeader time.Duration
+	Read       time.Duration
+	Write      time.Duration
+	Idle       time.Duration
+}
+
+// WithServerTimeouts sets the HTTP server timeouts used by App.Run.
+func WithServerTimeouts(t ServerTimeouts) Option {
+	return func(a *App) {
+		a.ReadHeaderTimeout = t.ReadHeader
+		a.ReadTimeout = t.Read
+		a.WriteTimeout = t.Write
+		a.IdleTimeout = t.Idle
+	}
+}
+
 // WithMaxMultipartMemory sets the maximum memory to use for multipart forms.
 func WithMaxMultipartMemory(max int64) Option {
 	return func(a *App) {

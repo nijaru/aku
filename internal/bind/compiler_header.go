@@ -100,6 +100,8 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 			!isText {
 			subSteps, subParams := compileHeaderLevel(fTyp, name)
 			subPrefix := name + "["
+			fieldIdx := i
+			isRequired := fieldRequired(field)
 			steps = append(
 				steps,
 				func(h http.Header, v reflect.Value, consumed map[string]struct{}) error {
@@ -116,10 +118,17 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 						}
 					}
 					if !found {
+						if isRequired {
+							return &BindError{
+								Field:  name,
+								Source: "header",
+								Err:    errors.New("is required"),
+							}
+						}
 						return nil
 					}
 
-					f := v.Field(i)
+					f := v.Field(fieldIdx)
 					if f.Kind() == reflect.Pointer {
 						if f.IsNil() {
 							f.Set(reflect.New(f.Type().Elem()))
@@ -142,6 +151,7 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 		isMap := field.Type.Kind() == reflect.Map
 		fieldIdx := i
 		fieldName := name
+		isRequired := fieldRequired(field)
 
 		if isSlice {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
@@ -164,6 +174,8 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 							}
 							f.Set(slice)
 						}
+					} else if isRequired {
+						return &BindError{Field: fieldName, Source: "header", Err: errors.New("is required")}
 					}
 					return nil
 				},
@@ -215,6 +227,8 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 				}
 				if found {
 					v.Field(fieldIdx).Set(m)
+				} else if isRequired {
+					return &BindError{Field: fieldName, Source: "header", Err: errors.New("is required")}
 				}
 				return nil
 			})
@@ -231,7 +245,11 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 						if err := coercer(val, v.Field(fieldIdx)); err != nil {
 							return &BindError{Field: fieldName, Source: "header", Err: err}
 						}
+					} else if isRequired {
+						return &BindError{Field: fieldName, Source: "header", Err: errors.New("is required")}
 					}
+				} else if isRequired {
+					return &BindError{Field: fieldName, Source: "header", Err: errors.New("is required")}
 				}
 				return nil
 			})
@@ -241,7 +259,7 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 			Name:     name,
 			In:       "header",
 			Type:     field.Type,
-			Required: field.Type.Kind() != reflect.Pointer,
+			Required: fieldRequired(field),
 			Validate: field.Tag.Get("validate"),
 			Message:  field.Tag.Get("msg"),
 			Example:  field.Tag.Get("example"),
