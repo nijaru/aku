@@ -2,6 +2,7 @@ package aku
 
 import (
 	"net/http"
+	"slices"
 )
 
 // Group represents a group of routes with a common prefix and middleware.
@@ -16,7 +17,7 @@ func (g *Group) Group(prefix string, mw ...func(http.Handler) http.Handler) *Gro
 	return &Group{
 		app:        g.app,
 		prefix:     g.prefix + prefix,
-		middleware: append(append([]func(http.Handler) http.Handler{}, g.middleware...), mw...),
+		middleware: append(slices.Clone(g.middleware), mw...),
 	}
 }
 

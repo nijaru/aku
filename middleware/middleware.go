@@ -14,6 +14,7 @@ import (
 	"github.com/andybalholm/brotli"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/gzhttp"
+	"github.com/nijaru/aku/internal/render"
 	"github.com/nijaru/aku/problem"
 	"golang.org/x/time/rate"
 )
@@ -88,14 +89,8 @@ func Recover(next http.Handler) http.Handler {
 					args = append(args, slog.String("request_id", id))
 				}
 				slog.Error("panic recovered", args...)
-				// We don't use handleError here because we want to keep middleware independent
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write(
-					[]byte(
-						`{"type":"https://aku.sh/problems/internal-error","title":"Internal Server Error","status":500}`,
-					),
-				)
+				render.Problem(w, http.StatusInternalServerError,
+					problem.InternalServerError("panic recovered"))
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -121,17 +116,7 @@ func Limit(rps float64, burst int) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !limiter.Allow() {
 				prob := problem.TooManyRequests("Rate limit exceeded")
-				w.Header().Set("Content-Type", "application/problem+json")
-				w.WriteHeader(prob.Status)
-				// Small hack to marshal JSON since we don't have access to render here easily
-				// Alternatively, we could just copy the JSON render logic for this single case
-				w.Write(
-					[]byte(
-						`{"type":"` + prob.Type + `","title":"` + prob.Title + `","status":` + strconv.Itoa(
-							prob.Status,
-						) + `,"detail":"` + prob.Detail + `"}`,
-					),
-				)
+				render.Problem(w, prob.Status, prob)
 				return
 			}
 			next.ServeHTTP(w, r)

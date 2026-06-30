@@ -99,6 +99,16 @@ func PayloadTooLarge(detail string) *Details {
 	}
 }
 
+// InternalServerError creates a 500 Internal Server Error problem.
+func InternalServerError(detail string) *Details {
+	return &Details{
+		Type:   "https://aku.sh/problems/internal-error",
+		Title:  "Internal Server Error",
+		Status: http.StatusInternalServerError,
+		Detail: detail,
+	}
+}
+
 // TooManyRequests creates a generic 429 Too Many Requests problem.
 func TooManyRequests(detail string) *Details {
 	return &Details{

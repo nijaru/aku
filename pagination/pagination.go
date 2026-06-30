@@ -7,19 +7,20 @@ import (
 
 // Page represents offset-based pagination.
 type Page struct {
-	Offset int `query:"offset" aku:"optional" doc:"Number of records to skip"`
-	Limit  int `query:"limit"  aku:"optional" doc:"Maximum number of records to return"`
+	Offset int `query:"offset" aku:"optional"`
+	Limit  int `query:"limit"  aku:"optional"`
 }
 
 // Cursor represents cursor-based pagination.
 type Cursor struct {
-	After  string `query:"after"  aku:"optional" doc:"Cursor pointing to the start of the next page"`
-	Before string `query:"before" aku:"optional" doc:"Cursor pointing to the start of the previous page"`
-	Limit  int    `query:"limit"  aku:"optional" doc:"Maximum number of records to return"`
+	After  string `query:"after"  aku:"optional"`
+	Before string `query:"before" aku:"optional"`
+	Limit  int    `query:"limit"  aku:"optional"`
 }
 
-// PageParams wraps Page and Limit with clamping/defaults.
-func (p *Page) Params() (offset, limit int) {
+// Params returns offset and limit with clamping/defaults applied.
+// Offset is clamped to >=0. Limit defaults to 20 and is capped at 100.
+func (p Page) Params() (offset, limit int) {
 	offset = p.Offset
 	if offset < 0 {
 		offset = 0
@@ -34,8 +35,9 @@ func (p *Page) Params() (offset, limit int) {
 	return offset, limit
 }
 
-// CursorParams wraps Cursor and Limit with clamping/defaults.
-func (c *Cursor) Params() (after, before string, limit int) {
+// Params returns after, before, and limit with clamping/defaults applied.
+// Limit defaults to 20 and is capped at 100.
+func (c Cursor) Params() (after, before string, limit int) {
 	after = c.After
 	before = c.Before
 	limit = c.Limit

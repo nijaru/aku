@@ -157,6 +157,7 @@ func TestMiddleware_Recover(t *testing.T) {
 			"type":   "https://aku.sh/problems/internal-error",
 			"title":  "Internal Server Error",
 			"status": float64(500),
+			"detail": "panic recovered",
 		})
 }
 

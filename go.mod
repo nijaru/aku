@@ -3,11 +3,11 @@ module github.com/nijaru/aku
 go 1.26.3
 
 require (
-	github.com/andybalholm/brotli v1.2.1
-	github.com/coder/websocket v1.8.14
-	github.com/go-playground/validator/v10 v10.30.2
+	github.com/andybalholm/brotli v1.2.2
+	github.com/coder/websocket v1.8.15
+	github.com/go-playground/validator/v10 v10.30.3
 	github.com/google/uuid v1.6.0
-	github.com/klauspost/compress v1.18.6
+	github.com/klauspost/compress v1.18.7
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
@@ -24,7 +24,7 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 )

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -304,7 +305,7 @@ func register[In any, Out any](
 		Schema:      schema,
 		OutputType:  outType,
 		middleware: append(
-			append([]func(http.Handler) http.Handler{}, groupMW...),
+			slices.Clone(groupMW),
 			meta.middleware...,
 		),
 	}

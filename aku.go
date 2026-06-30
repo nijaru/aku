@@ -1,3 +1,51 @@
+// Package aku is a high-performance, typesafe HTTP framework for building APIs
+// on Go's standard library net/http.
+//
+// Aku bridges the gap between net/http and the ergonomics of modern frameworks
+// like FastAPI or Axum. It uses Go's type system to automate request extraction,
+// validation, and OpenAPI documentation without sacrificing standard library
+// compatibility.
+//
+// # Quick Start
+//
+//	type GreetRequest struct {
+//	    Path struct {
+//	        Name string `path:"name"`
+//	    }
+//	    Query struct {
+//	        Shout bool `query:"shout"`
+//	    }
+//	}
+//
+//	type GreetResponse struct {
+//	    Message string `json:"message"`
+//	}
+//
+//	func Greet(ctx context.Context, in GreetRequest) (GreetResponse, error) {
+//	    msg := "Hello, " + in.Path.Name
+//	    if in.Query.Shout {
+//	        msg += "!"
+//	    }
+//	    return GreetResponse{Message: msg}, nil
+//	}
+//
+//	func main() {
+//	    app := aku.New()
+//	    aku.Get(app, "/greet/{name}", Greet)
+//	    app.OpenAPI("/openapi.json", "My API", "1.0.0")
+//	    app.SwaggerUI("/docs", "/openapi.json")
+//	    app.Run(":8080")
+//	}
+//
+// # Features
+//
+//   - Typesafe request extraction from Path, Query, Header, Form, Body, and Context
+//   - Automatic OpenAPI 3.0 generation from Go types
+//   - Zero-reflection hot path with pre-compiled extraction plans
+//   - Built-in validation via go-playground/validator
+//   - Middleware suite: logging, recovery, timeout, CORS, compression, rate limiting, security headers
+//   - Streaming support: io.Reader, Server-Sent Events, WebSockets
+//   - Standard http.Handler escape hatches for Prometheus, health checks, etc.
 package aku
 
 import (
@@ -8,6 +56,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -112,7 +161,7 @@ func (a *App) handleHTTP(
 		OperationID: meta.operationID,
 		Security:    meta.security,
 		middleware: append(
-			append([]func(http.Handler) http.Handler{}, parentMiddleware...),
+			slices.Clone(parentMiddleware),
 			meta.middleware...,
 		),
 	}
@@ -267,6 +316,7 @@ func (a *App) Run(addr string) error {
 	go func() {
 		sigint := make(chan os.Signal, 1)
 		signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
+		defer signal.Stop(sigint)
 
 		select {
 		case <-sigint:

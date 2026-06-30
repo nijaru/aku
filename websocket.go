@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"slices"
 	"sync"
 
 	"github.com/coder/websocket"
@@ -175,7 +176,7 @@ func WS[In any, Msg any](
 		Security:    meta.security,
 		Schema:      schema,
 		middleware: append(
-			append([]func(http.Handler) http.Handler{}, groupMW...),
+			slices.Clone(groupMW),
 			meta.middleware...,
 		),
 	}
