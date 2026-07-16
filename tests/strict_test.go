@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/auth"
 )
 
 func TestStrictQuery(t *testing.T) {
@@ -38,6 +39,20 @@ func TestStrictQuery(t *testing.T) {
 			t.Errorf("expected 422, got %d: %s", rr.Code, rr.Body.String())
 		}
 	})
+}
+
+func TestStrictQueryAppliesWithoutQuerySection(t *testing.T) {
+	app := aku.New(aku.WithStrictQuery())
+	aku.Get(app, "/test", func(ctx context.Context, in struct{}) (string, error) {
+		return "ok", nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test?unexpected=value", nil)
+	rr := httptest.NewRecorder()
+	app.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected strict query rejection, got %d: %s", rr.Code, rr.Body.String())
+	}
 }
 
 func TestStrictHeader(t *testing.T) {
@@ -92,4 +107,58 @@ func TestStrictHeader(t *testing.T) {
 			t.Errorf("expected 200, got %d", rr.Code)
 		}
 	})
+}
+
+func TestStrictHeaderAllowsTypedBearerAuth(t *testing.T) {
+	type In struct {
+		Header struct {
+			Trace string `header:"X-Trace"`
+		}
+		Auth struct {
+			Token auth.Bearer
+		}
+	}
+
+	app := aku.New(aku.WithStrictHeader())
+	aku.Get(app, "/test", func(ctx context.Context, in In) (string, error) {
+		return string(in.Auth.Token), nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("X-Trace", "trace")
+	req.Header.Set("User-Agent", "test")
+	rr := httptest.NewRecorder()
+	app.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf(
+			"expected auth header to be accepted in strict mode, got %d: %s",
+			rr.Code,
+			rr.Body.String(),
+		)
+	}
+}
+
+func TestStrictQueryAllowsAPIKeyAuth(t *testing.T) {
+	type In struct {
+		Auth struct {
+			Key auth.APIKey `auth:"apikey:query:api_key"`
+		}
+	}
+
+	app := aku.New(aku.WithStrictQuery())
+	aku.Get(app, "/test", func(ctx context.Context, in In) (string, error) {
+		return string(in.Auth.Key), nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test?api_key=secret", nil)
+	rr := httptest.NewRecorder()
+	app.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf(
+			"expected auth query parameter to be accepted in strict mode, got %d: %s",
+			rr.Code,
+			rr.Body.String(),
+		)
+	}
 }

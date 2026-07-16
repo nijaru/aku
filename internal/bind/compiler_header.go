@@ -21,31 +21,9 @@ func compileHeader(sectionIdx int, typ reflect.Type) (internalExtractor, []Param
 	return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
 		section := v.Field(sectionIdx)
 
-		var consumed map[string]struct{}
-		if cfg.StrictHeader {
-			consumed = make(map[string]struct{}, len(r.Header))
-		}
-
 		for _, step := range steps {
-			if err := step(r.Header, section, consumed); err != nil {
+			if err := step(r.Header, section, nil); err != nil {
 				return err
-			}
-		}
-
-		if cfg.StrictHeader {
-			for k := range r.Header {
-				// Standard headers that we should ignore
-				if isStandardHeader(k) {
-					continue
-				}
-
-				if _, ok := consumed[http.CanonicalHeaderKey(k)]; !ok {
-					return &BindError{
-						Field:  k,
-						Source: "header",
-						Err:    errors.New("unknown parameter"),
-					}
-				}
 			}
 		}
 
@@ -67,17 +45,24 @@ func headerValues(header http.Header, name string) []string {
 
 func isStandardHeader(h string) bool {
 	h = strings.ToLower(h)
-	// Common standard headers to ignore in strict mode
+	// Standard request and proxy headers are transport concerns rather than
+	// application inputs. Strict mode should not reject them merely because a
+	// route does not bind them explicitly.
 	standard := []string{
-		"accept", "accept-encoding", "accept-language", "connection",
-		"cookie", "content-length", "content-type", "host",
-		"origin", "referer", "sec-ch-ua", "sec-ch-ua-mobile",
-		"sec-ch-ua-platform", "sec-fetch-dest", "sec-fetch-mode",
-		"sec-fetch-site", "sec-fetch-user", "upgrade-insecure-requests",
-		"user-agent", "x-forwarded-for", "x-forwarded-host",
-		"x-forwarded-proto", "x-request-id", "traceparent", "tracestate",
+		"accept", "accept-charset", "accept-encoding", "accept-language",
+		"accept-patch", "accept-post", "accept-ranges", "age", "cache-control",
+		"connection", "content-encoding", "content-language", "content-length",
+		"content-location", "content-md5", "content-range", "content-type",
+		"date", "expect", "forwarded", "host", "if-match", "if-modified-since",
+		"if-none-match", "if-range", "if-unmodified-since", "keep-alive",
+		"last-modified", "max-forwards", "origin", "pragma", "proxy-authenticate",
+		"proxy-authorization", "range", "referer", "retry-after", "server",
+		"te", "trailer", "transfer-encoding", "traceparent", "tracestate",
+		"upgrade", "upgrade-insecure-requests", "user-agent", "vary", "via",
+		"warning", "www-authenticate", "x-forwarded-for", "x-forwarded-host",
+		"x-forwarded-proto", "x-request-id",
 	}
-	return slices.Contains(standard, h)
+	return slices.Contains(standard, h) || strings.HasPrefix(h, "sec-")
 }
 
 type headerStep func(http.Header, reflect.Value, map[string]struct{}) error

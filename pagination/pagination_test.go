@@ -85,6 +85,20 @@ func TestBuildLinks_EmptyCursors(t *testing.T) {
 	}
 }
 
+func TestBuildLinks_ClearsOppositeCursors(t *testing.T) {
+	links := BuildLinks("/api/users?before=old&filter=active", "next123", "prev456", 20)
+
+	if links.First != "/api/users?filter=active&limit=20" {
+		t.Fatalf("unexpected first link: %s", links.First)
+	}
+	if links.Next != "/api/users?after=next123&filter=active&limit=20" {
+		t.Fatalf("unexpected next link: %s", links.Next)
+	}
+	if links.Prev != "/api/users?before=prev456&filter=active&limit=20" {
+		t.Fatalf("unexpected prev link: %s", links.Prev)
+	}
+}
+
 func TestBuildPageLinks(t *testing.T) {
 	// 100 total, offset 0, limit 20
 	links := BuildPageLinks("/api/items", 0, 20, 100)

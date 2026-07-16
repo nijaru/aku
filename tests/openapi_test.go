@@ -1,6 +1,7 @@
 package aku_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"mime/multipart"
@@ -148,6 +149,19 @@ func TestOpenAPI_Advanced(t *testing.T) {
 	}
 }
 
+func TestOpenAPI_DocumentsConcreteReaderOutputsAsBinary(t *testing.T) {
+	app := aku.New()
+	aku.Get(app, "/download", func(ctx context.Context, in struct{}) (*bytes.Reader, error) {
+		return bytes.NewReader([]byte("download")), nil
+	})
+
+	response := app.OpenAPIDocument("Reader API", "1.0.0").Paths["/download"]["get"].Responses["200"]
+	media, ok := response.Content["application/octet-stream"]
+	if !ok || media.Schema.Format != "binary" {
+		t.Fatalf("expected concrete reader to be documented as binary, got %+v", response.Content)
+	}
+}
+
 func TestOpenAPI_UIEscapesSpecURL(t *testing.T) {
 	app := aku.New()
 	specURL := `/openapi.json";alert(1);//`
@@ -172,5 +186,36 @@ func TestOpenAPI_UIEscapesSpecURL(t *testing.T) {
 	)
 	if strings.Contains(rec.Body.String(), `" onload="`) {
 		t.Fatal("Redoc UI rendered an unescaped attribute value")
+	}
+}
+
+func TestOpenAPIHandlerReflectsRoutesRegisteredAfterFirstRequest(t *testing.T) {
+	app := aku.New()
+	app.OpenAPI("/openapi.json", "Dynamic API", "1.0.0")
+
+	requestSpec := func() map[string]any {
+		rec := httptest.NewRecorder()
+		app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/openapi.json", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected OpenAPI status 200, got %d", rec.Code)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+			t.Fatalf("decode OpenAPI document: %v", err)
+		}
+		return doc
+	}
+
+	if paths := requestSpec()["paths"].(map[string]any); len(paths) != 0 {
+		t.Fatalf("expected no API routes initially, got %v", paths)
+	}
+
+	aku.Get(app, "/late", func(ctx context.Context, in struct{}) (string, error) {
+		return "late", nil
+	})
+
+	paths := requestSpec()["paths"].(map[string]any)
+	if _, ok := paths["/late"]; !ok {
+		t.Fatalf("expected late route in refreshed OpenAPI document: %v", paths)
 	}
 }

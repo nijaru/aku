@@ -77,7 +77,10 @@ func (hc *HealthChecker) Readiness() http.Handler {
 			wg.Go(func() {
 				if err := check(r.Context()); err != nil {
 					mu.Lock()
-					results[name] = "failed: " + err.Error()
+					// Readiness endpoints are commonly unauthenticated. Do not
+					// expose dependency details such as connection strings or
+					// tenant identifiers in their response body.
+					results[name] = "failed"
 					mu.Unlock()
 				} else {
 					mu.Lock()
@@ -91,7 +94,7 @@ func (hc *HealthChecker) Readiness() http.Handler {
 
 		var anyFailed bool
 		for _, v := range results {
-			if len(v) > 6 && v[:6] == "failed" {
+			if v == "failed" {
 				anyFailed = true
 				break
 			}

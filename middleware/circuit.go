@@ -80,6 +80,12 @@ type CircuitBreaker struct {
 	success       int
 	openedAt      time.Time
 	probeInFlight bool
+	generation    uint64
+}
+
+type circuitPermit struct {
+	generation uint64
+	halfOpen   bool
 }
 
 // NewCircuitBreaker creates a circuit breaker with the given config.
@@ -100,24 +106,29 @@ func (cb *CircuitBreaker) State() State {
 // If true is returned, the caller MUST call cb.Record(success) after
 // the result is known.
 func (cb *CircuitBreaker) Allow() bool {
+	_, allowed := cb.acquire()
+	return allowed
+}
+
+func (cb *CircuitBreaker) acquire() (circuitPermit, bool) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.checkTransition()
 
 	switch cb.state {
 	case StateClosed:
-		return true
+		return circuitPermit{generation: cb.generation}, true
 	case StateOpen:
-		return false
+		return circuitPermit{}, false
 	case StateHalfOpen:
 		if cb.probeInFlight {
-			return false
+			return circuitPermit{}, false
 		}
 		// Allow exactly one probe through.
 		cb.probeInFlight = true
-		return true
+		return circuitPermit{generation: cb.generation, halfOpen: true}, true
 	default:
-		return false
+		return circuitPermit{}, false
 	}
 }
 
@@ -125,10 +136,32 @@ func (cb *CircuitBreaker) Allow() bool {
 func (cb *CircuitBreaker) Record(success bool) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	defer func() {
-		cb.probeInFlight = false
-	}()
+	if cb.state == StateOpen {
+		return
+	}
+	if cb.state == StateHalfOpen && !cb.probeInFlight {
+		return
+	}
+	cb.probeInFlight = false
+	cb.recordLocked(success)
+}
 
+func (cb *CircuitBreaker) record(permit circuitPermit, success bool) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	if permit.generation != cb.generation {
+		return
+	}
+	if permit.halfOpen && !cb.probeInFlight {
+		return
+	}
+	if permit.halfOpen {
+		cb.probeInFlight = false
+	}
+	cb.recordLocked(success)
+}
+
+func (cb *CircuitBreaker) recordLocked(success bool) {
 	if success {
 		cb.onSuccess()
 	} else {
@@ -160,9 +193,6 @@ func (cb *CircuitBreaker) onSuccess() {
 		if cb.success >= cb.cfg.SuccessThreshold {
 			cb.transition(StateClosed, "success threshold reached")
 		}
-	case StateOpen:
-		cb.failures = 0
-		cb.transition(StateClosed, "success after open")
 	}
 }
 
@@ -176,15 +206,13 @@ func (cb *CircuitBreaker) onFailure() {
 	case StateHalfOpen:
 		cb.transition(StateOpen, "probe request failed")
 		cb.success = 0
-	case StateOpen:
-		// Already open — reset the recovery timer.
-		cb.openedAt = time.Now()
 	}
 }
 
 func (cb *CircuitBreaker) transition(next State, msg string) {
 	prev := cb.state
 	cb.state = next
+	cb.generation++
 	cb.openedAt = time.Now()
 	cb.probeInFlight = false
 
@@ -209,7 +237,8 @@ func (cb *CircuitBreaker) transition(next State, msg string) {
 func CircuitBreakerMiddleware(cb *CircuitBreaker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !cb.Allow() {
+			permit, allowed := cb.acquire()
+			if !allowed {
 				w.Header().Set("Content-Type", "application/problem+json")
 				w.WriteHeader(http.StatusServiceUnavailable)
 				resp := map[string]any{
@@ -225,13 +254,13 @@ func CircuitBreakerMiddleware(cb *CircuitBreaker) func(http.Handler) http.Handle
 			recorded := false
 			defer func() {
 				if !recorded {
-					cb.Record(false)
+					cb.record(permit, false)
 				}
 			}()
 
 			rec := &statusCapture{ResponseWriter: w, code: http.StatusOK}
 			next.ServeHTTP(rec, r)
-			cb.Record(!cb.cfg.IsFailure(rec.code))
+			cb.record(permit, !cb.cfg.IsFailure(rec.code))
 			recorded = true
 		})
 	}

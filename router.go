@@ -169,6 +169,9 @@ func register[In any, Out any](
 		if err := extractor(r.Context(), r, in, pooled.val, app.bindConfig); err != nil {
 			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
 				if bindErr.Source == "auth" {
+					if bindErr.Challenge != "" {
+						w.Header().Set("WWW-Authenticate", bindErr.Challenge)
+					}
 					handleError(app, w, r, problem.Unauthorized(bindErr.Err.Error()))
 				} else if _, ok := errors.AsType[*http.MaxBytesError](bindErr.Err); ok {
 					handleError(app, w, r, bindErr.Err)
@@ -231,7 +234,7 @@ func register[In any, Out any](
 		}
 		if isStream {
 			s, ok := streamResponse(out)
-			if !ok {
+			if !ok || s.Reader == nil {
 				handleError(
 					app,
 					w,
@@ -249,7 +252,7 @@ func register[In any, Out any](
 		}
 		if isSSE {
 			sse, ok := sseResponse(out)
-			if !ok {
+			if !ok || sse.Events == nil {
 				handleError(
 					app,
 					w,
@@ -316,6 +319,9 @@ func register[In any, Out any](
 			meta.middleware...,
 		),
 	}
+	if err := bind.ValidatePathPattern(fullPattern, schema); err != nil {
+		return err
+	}
 
 	// Register with the router.
 	if err := registerRoute(r, method, pattern, finalHandler, route); err != nil {
@@ -346,16 +352,18 @@ func registerAuthSecurity(app *App, route *Route, auths []bind.AuthScheme) {
 		return
 	}
 
+	app.mu.Lock()
+	defer app.mu.Unlock()
 	required := make(map[string][]string)
 	for _, auth := range auths {
-		app.AddSecurityScheme(auth.Name, SecurityScheme{
+		app.securitySchemes[auth.Name] = SecurityScheme{
 			Type:         auth.Type,
 			Description:  auth.Description,
 			Scheme:       auth.Scheme,
 			BearerFormat: auth.BearerFmt,
 			In:           auth.In,
 			Name:         auth.ParamName,
-		})
+		}
 		if auth.Required {
 			required[auth.Name] = []string{}
 		}
@@ -367,15 +375,21 @@ func registerAuthSecurity(app *App, route *Route, auths []bind.AuthScheme) {
 	if len(route.Security) == 0 && len(required) > 0 {
 		route.Security = []map[string][]string{required}
 	}
+	app.openapiVersion++
 }
 
 func handleError(app *App, w http.ResponseWriter, r *http.Request, err error) {
-	for _, observer := range app.errorObservers {
+	app.mu.RLock()
+	observers := slices.Clone(app.errorObservers)
+	errorHandler := app.errorHandler
+	app.mu.RUnlock()
+
+	for _, observer := range observers {
 		observer(r.Context(), err)
 	}
 
-	if app.errorHandler != nil {
-		app.errorHandler(w, r, err)
+	if errorHandler != nil {
+		errorHandler(w, r, err)
 		return
 	}
 

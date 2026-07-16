@@ -1,6 +1,7 @@
 package aku
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"path"
@@ -33,7 +34,7 @@ func (a *App) staticFS(
 	if !strings.HasSuffix(pattern, "/") {
 		redirect := http.RedirectHandler(pattern+"/", http.StatusMovedPermanently)
 		redirect = wrapHandler(redirect, parentMiddleware)
-		a.mux.Handle("GET "+pattern, redirect)
+		a.registerHandler("GET "+pattern, redirect)
 		pattern += "/"
 	}
 
@@ -53,18 +54,7 @@ func (a *App) staticFS(
 	handler = wrapHandler(handler, parentMiddleware)
 
 	// We use a.mux.Handle directly here to support subtree matching (trailing slash).
-	a.mux.Handle("GET "+pattern, handler)
-
-	// Add to routes for OpenAPI (optional, usually static files are internal)
-	if !meta.internal {
-		a.routes = append(a.routes, &Route{
-			Method:      "GET",
-			Pattern:     prefix + "*",
-			Summary:     meta.summary,
-			Description: meta.description,
-			Internal:    true, // Static files are internal by default
-		})
-	}
+	a.registerHandler("GET "+pattern, handler)
 }
 
 func (g *Group) Static(prefix, root string, opts ...RouteOption) {
@@ -108,8 +98,24 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Use ServeContent to handle range requests, caching, etc.
-		http.ServeContent(w, r, "index.html", stat.ModTime(), f.(io.ReadSeeker))
+		// FileServer writes a text/plain content type before reporting its 404.
+		// Clear that suppressed error metadata so the fallback is served as HTML.
+		w.Header().Del("Content-Type")
+		w.Header().Del("Content-Length")
+
+		// Use ServeContent to handle range requests and caching when the file is
+		// seekable. Custom http.FileSystem implementations are allowed to return
+		// non-seekable files, so buffer those rather than panicking on a type cast.
+		if rs, ok := f.(io.ReadSeeker); ok {
+			http.ServeContent(w, r, "index.html", stat.ModTime(), rs)
+			return
+		}
+		data, err := io.ReadAll(f)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		http.ServeContent(w, r, "index.html", stat.ModTime(), bytes.NewReader(data))
 	}
 }
 

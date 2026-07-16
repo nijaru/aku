@@ -42,7 +42,7 @@
 //   - Typesafe request extraction from Path, Query, Header, Form, Body, and Context
 //   - Automatic OpenAPI 3.0 generation from Go types
 //   - Precompiled extraction plans and coercers for lower request-time overhead
-//   - Built-in validation via go-playground/validator
+//   - Optional validation via go-playground/validator and Validate hooks
 //   - Middleware suite: logging, recovery, timeout, CORS, compression, rate limiting, security headers
 //   - Streaming support: io.Reader, Server-Sent Events, WebSockets
 //   - Standard http.Handler escape hatches for Prometheus, health checks, etc.
@@ -67,6 +67,7 @@ import (
 
 // App is the core framework application, wrapping a standard library HTTP multiplexer.
 type App struct {
+	mu                 sync.RWMutex
 	mux                *http.ServeMux
 	handler            http.Handler
 	middleware         []func(http.Handler) http.Handler
@@ -74,6 +75,7 @@ type App struct {
 	validator          Validator
 	errorHandler       ErrorHandler
 	securitySchemes    map[string]SecurityScheme
+	openapiVersion     uint64
 	MaxMultipartMemory int64
 	ShutdownTimeout    time.Duration
 	ReadHeaderTimeout  time.Duration
@@ -110,6 +112,8 @@ func New(opts ...Option) *App {
 
 // Use adds global middleware to the application.
 func (a *App) Use(mw ...func(http.Handler) http.Handler) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.middleware = append(a.middleware, mw...)
 	a.refreshHandler()
 }
@@ -129,8 +133,19 @@ func (a *App) Group(prefix string, mw ...func(http.Handler) http.Handler) *Group
 
 // Handle implements the Router interface.
 func (a *App) Handle(method, pattern string, handler http.Handler, route *Route) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.mux.Handle(method+" "+pattern, handler)
-	a.routes = append(a.routes, route)
+	if route != nil {
+		a.routes = append(a.routes, route)
+		a.openapiVersion++
+	}
+}
+
+func (a *App) registerHandler(pattern string, handler http.Handler) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.mux.Handle(pattern, handler)
 }
 
 func (a *App) handleHTTP(
@@ -146,8 +161,6 @@ func (a *App) handleHTTP(
 
 	finalHandler := wrapHandler(handler, meta.middleware)
 	finalHandler = wrapHandler(finalHandler, parentMiddleware)
-
-	a.mux.Handle(method+" "+pattern, finalHandler)
 
 	route := &Route{
 		Method:      method,
@@ -165,7 +178,12 @@ func (a *App) handleHTTP(
 			meta.middleware...,
 		),
 	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.mux.Handle(method+" "+pattern, finalHandler)
 	a.routes = append(a.routes, route)
+	a.openapiVersion++
 }
 
 // HandleHTTP registers a standard http.Handler on the application's multiplexer.
@@ -187,17 +205,31 @@ func (a *App) Middleware() []func(http.Handler) http.Handler { return nil }
 
 // Routes returns the list of registered routes and their metadata.
 func (a *App) Routes() []*Route {
-	return slices.Clone(a.routes)
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.routes == nil {
+		return nil
+	}
+	routes := make([]*Route, len(a.routes))
+	for i, route := range a.routes {
+		routes[i] = cloneRoute(route)
+	}
+	return routes
 }
 
 // AddSecurityScheme adds a security scheme to the application.
 func (a *App) AddSecurityScheme(name string, scheme SecurityScheme) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.securitySchemes[name] = scheme
+	a.openapiVersion++
 }
 
 // AddErrorObserver adds an error observer to the application.
 // Error observers are called whenever an error is handled by the framework.
 func (a *App) AddErrorObserver(observer func(context.Context, error)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.errorObservers = append(a.errorObservers, observer)
 }
 
@@ -217,9 +249,14 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	iw.written = false
 	iw.intercepted = false
 	iw.hijacked = false
-	defer errorInterceptorPool.Put(iw)
+	defer func() {
+		iw.ResponseWriter = nil
+		errorInterceptorPool.Put(iw)
+	}()
 
+	a.mu.RLock()
 	finalHandler := a.handler
+	a.mu.RUnlock()
 	if finalHandler == nil {
 		finalHandler = a.mux
 	}
@@ -270,8 +307,7 @@ func (i *errorInterceptor) Write(b []byte) (int, error) {
 	}
 	if !i.written {
 		i.written = true
-		if (i.status == http.StatusNotFound && string(b) == "404 page not found\n") ||
-			(i.status == http.StatusMethodNotAllowed && string(b) == "Method Not Allowed\n") {
+		if i.isServeMuxError(b) {
 			i.intercepted = true
 			return len(b), nil
 		}
@@ -286,6 +322,15 @@ func (i *errorInterceptor) Write(b []byte) (int, error) {
 	}
 
 	return i.ResponseWriter.Write(b)
+}
+
+func (i *errorInterceptor) isServeMuxError(b []byte) bool {
+	if i.Header().Get("Content-Type") != "text/plain; charset=utf-8" ||
+		i.Header().Get("X-Content-Type-Options") != "nosniff" {
+		return false
+	}
+	return (i.status == http.StatusNotFound && string(b) == "404 page not found\n") ||
+		(i.status == http.StatusMethodNotAllowed && string(b) == "Method Not Allowed\n")
 }
 
 func (i *errorInterceptor) Hijack() (net.Conn, *bufio.ReadWriter, error) {

@@ -7,13 +7,8 @@ import (
 	"net/http"
 
 	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/auth"
 )
-
-type SecureRequest struct {
-	Header struct {
-		Authorization string `header:"Authorization"`
-	}
-}
 
 type SecureResponse struct {
 	Message string `json:"message"`
@@ -34,12 +29,15 @@ func main() {
 	})
 
 	// Apply security metadata to route
-	aku.Get(
+	if err := aku.Get(
 		app, "/secure", SecureHandler,
+		aku.WithMiddleware(auth.RequireBearer()),
 		aku.WithSecurityName("BearerAuth"),
 		aku.WithSummary("A secure endpoint"),
 		aku.WithTag("Authentication"),
-	)
+	); err != nil {
+		log.Fatal(err)
+	}
 
 	app.OpenAPI("/openapi.json", "Secure API", "1.0.0")
 	app.SwaggerUI("/docs", "/openapi.json")

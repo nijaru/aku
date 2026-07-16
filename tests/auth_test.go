@@ -74,6 +74,9 @@ func TestBearerExtraction_Missing(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
 	}
+	if got := rec.Header().Get("WWW-Authenticate"); got != "Bearer" {
+		t.Fatalf("expected Bearer challenge, got %q", got)
+	}
 }
 
 func TestBearerExtraction_WrongScheme(t *testing.T) {
@@ -189,14 +192,20 @@ func TestRequireBearerMiddleware(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rec.Code)
 	}
+	if got := rec.Header().Get("WWW-Authenticate"); got != "Bearer" {
+		t.Fatalf("expected Bearer challenge, got %q", got)
+	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
-	req2.Header.Set("Authorization", "Bearer valid-token")
-	rec2 := httptest.NewRecorder()
-	handler.ServeHTTP(rec2, req2)
+	app.HandleHTTP(http.MethodGet, "/test", handler)
+	for _, value := range []string{"Bearer valid-token", "bearer valid-token", "BEARER    valid-token"} {
+		req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req2.Header.Set("Authorization", value)
+		rec2 := httptest.NewRecorder()
+		app.ServeHTTP(rec2, req2)
 
-	if rec2.Code != http.StatusOK {
-		t.Fatalf("expected 200 with valid token, got %d", rec2.Code)
+		if rec2.Code != http.StatusOK {
+			t.Errorf("expected 200 with valid token %q, got %d", value, rec2.Code)
+		}
 	}
 }
 

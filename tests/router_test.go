@@ -84,6 +84,73 @@ func TestRegisterRejectsUnsupportedInputTypes(t *testing.T) {
 	}
 }
 
+func TestRegisterRejectsInvalidAuthDeclaration(t *testing.T) {
+	app := aku.New()
+	type In struct {
+		Auth struct {
+			Key string `auth:"apikey:heder:X-API-Key"`
+		}
+	}
+
+	err := aku.Get(app, "/invalid-auth", func(ctx context.Context, in In) (struct{}, error) {
+		return struct{}{}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid API key declaration") {
+		t.Fatalf("expected invalid auth declaration error, got %v", err)
+	}
+
+	type BadBearerTag struct {
+		Auth struct {
+			Token string `auth:"bearer:token"`
+		}
+	}
+	err = aku.Get(
+		app,
+		"/invalid-bearer",
+		func(ctx context.Context, in BadBearerTag) (struct{}, error) {
+			return struct{}{}, nil
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "unsupported authentication declaration") {
+		t.Fatalf("expected invalid bearer declaration error, got %v", err)
+	}
+}
+
+func TestRegisterRejectsBodyAndForm(t *testing.T) {
+	app := aku.New()
+	type In struct {
+		Body struct {
+			Name string `json:"name"`
+		}
+		Form struct {
+			Value string `form:"value"`
+		}
+	}
+
+	err := aku.Post(app, "/both", func(ctx context.Context, in In) (struct{}, error) {
+		return struct{}{}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "both Body and Form") {
+		t.Fatalf("expected Body/Form conflict error, got %v", err)
+	}
+}
+
+func TestRegisterRejectsMismatchedPathBinding(t *testing.T) {
+	app := aku.New()
+	type In struct {
+		Path struct {
+			ID string `path:"other"`
+		}
+	}
+
+	err := aku.Get(app, "/users/{id}", func(ctx context.Context, in In) (struct{}, error) {
+		return struct{}{}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "no matching path binding") {
+		t.Fatalf("expected path binding error, got %v", err)
+	}
+}
+
 func TestRegisterRejectsConflictingRoutes(t *testing.T) {
 	app := aku.New()
 	handler := func(ctx context.Context, in struct{}) (struct{}, error) {
@@ -95,6 +162,40 @@ func TestRegisterRejectsConflictingRoutes(t *testing.T) {
 	}
 	if err := aku.Get(app, "/conflict", handler); err == nil {
 		t.Fatal("expected conflicting route registration to return an error")
+	}
+}
+
+func TestRoutesReturnsMetadataSnapshot(t *testing.T) {
+	app := aku.New()
+	aku.Get(app, "/snapshot", func(ctx context.Context, in struct{}) (string, error) {
+		return "ok", nil
+	}, aku.WithTags("original"))
+
+	routes := app.Routes()
+	routes[0].Summary = "mutated"
+	routes[0].Tags[0] = "mutated"
+
+	doc := app.OpenAPIDocument("Snapshot API", "1.0.0")
+	operation := doc.Paths["/snapshot"]["get"]
+	if operation.Summary == "mutated" || operation.Tags[0] == "mutated" {
+		t.Fatal("mutating Routes() result changed application metadata")
+	}
+}
+
+func TestHandleWithoutMetadataIsExcludedFromOpenAPI(t *testing.T) {
+	app := aku.New()
+	app.Handle(
+		http.MethodGet,
+		"/raw",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		nil,
+	)
+
+	doc := app.OpenAPIDocument("Raw API", "1.0.0")
+	if _, ok := doc.Paths["/raw"]; ok {
+		t.Fatal("expected raw route without metadata to be excluded from OpenAPI")
 	}
 }
 

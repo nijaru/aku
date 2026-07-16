@@ -157,4 +157,27 @@ func TestWebsocketAuthFailureIsUnauthorized(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", resp.StatusCode)
 	}
+	if got := resp.Header.Get("WWW-Authenticate"); got != "Bearer" {
+		t.Fatalf("expected Bearer challenge, got %q", got)
+	}
+}
+
+func TestWebsocketRejectsMismatchedPathBinding(t *testing.T) {
+	app := aku.New()
+	type In struct {
+		Path struct {
+			ID string `path:"other"`
+		}
+	}
+
+	err := aku.WS(
+		app,
+		"/chat/{id}",
+		func(ctx context.Context, in In, ws *aku.Websocket[WSMessage]) error {
+			return nil
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "no matching path binding") {
+		t.Fatalf("expected websocket path binding error, got %v", err)
+	}
 }

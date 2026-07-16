@@ -58,9 +58,10 @@ type Parameter struct {
 
 // BindError represents an error that occurred during request extraction or validation.
 type BindError struct {
-	Field  string
-	Source string // "path", "query", "header", "body"
-	Err    error
+	Field     string
+	Source    string // "path", "query", "header", "body"
+	Err       error
+	Challenge string // Optional WWW-Authenticate challenge for auth failures.
 }
 
 // Validate checks the input shape and tagged scalar types before a route is
@@ -76,6 +77,8 @@ func Validate[T any]() error {
 		return fmt.Errorf("input type must be a struct or interface, got %s", typ)
 	}
 
+	hasBody := false
+	hasForm := false
 	for field := range typ.Fields() {
 		if field.PkgPath != "" {
 			continue
@@ -104,27 +107,53 @@ func Validate[T any]() error {
 				return err
 			}
 		case "Form":
+			hasForm = true
 			if field.Type.Kind() != reflect.Struct {
 				return fmt.Errorf("%s section must be a struct, got %s", field.Name, field.Type)
 			}
 			if err := validateTaggedFields(field.Type, "form", field.Name); err != nil {
 				return err
 			}
-		case "Ctx", "Auth":
+		case "Body":
+			hasBody = true
+		case "Ctx":
 			if field.Type.Kind() != reflect.Struct {
 				return fmt.Errorf("%s section must be a struct, got %s", field.Name, field.Type)
+			}
+		case "Auth":
+			if field.Type.Kind() != reflect.Struct {
+				return fmt.Errorf("%s section must be a struct, got %s", field.Name, field.Type)
+			}
+			if err := validateAuthFields(field.Type); err != nil {
+				return err
 			}
 		default:
 			continue
 		}
 	}
+	if hasBody && hasForm {
+		return errors.New("input cannot declare both Body and Form sections")
+	}
 	return nil
 }
 
 func validateTaggedFields(typ reflect.Type, tagName, prefix string) error {
+	return validateTaggedFieldsStack(typ, tagName, prefix, make(map[reflect.Type]bool))
+}
+
+func validateTaggedFieldsStack(
+	typ reflect.Type,
+	tagName, prefix string,
+	stack map[reflect.Type]bool,
+) error {
 	if typ.Kind() != reflect.Struct {
 		return nil
 	}
+	if stack[typ] {
+		return fmt.Errorf("recursive %s binding through %s", tagName, prefix)
+	}
+	stack[typ] = true
+	defer delete(stack, typ)
 
 	fileHeaderType := reflect.TypeFor[*multipart.FileHeader]()
 	fileHeaderSliceType := reflect.TypeFor[[]*multipart.FileHeader]()
@@ -152,7 +181,7 @@ func validateTaggedFields(typ reflect.Type, tagName, prefix string) error {
 			reflect.PointerTo(base).Implements(textUnmarshalerType)
 		if base.Kind() == reflect.Struct && base != reflect.TypeFor[time.Time]() && !isBinder &&
 			!isText {
-			if err := validateTaggedFields(base, tagName, name); err != nil {
+			if err := validateTaggedFieldsStack(base, tagName, name, stack); err != nil {
 				return err
 			}
 			continue
@@ -293,6 +322,9 @@ func Compiler[T any]() (Extractor[T], *Schema) {
 				return err
 			}
 		}
+		if err := validateStrictInputs(r, schema, cfg); err != nil {
+			return err
+		}
 		if validator != nil {
 			return validator(t)
 		}
@@ -303,6 +335,10 @@ func Compiler[T any]() (Extractor[T], *Schema) {
 // GetCustomMessages extracts the 'msg' tag from all fields of a struct and its sub-structs.
 // It maps the tag name (e.g. from query, json, etc.) to the custom error message.
 func GetCustomMessages(typ reflect.Type) map[string]string {
+	return getCustomMessages(typ, make(map[reflect.Type]bool))
+}
+
+func getCustomMessages(typ reflect.Type, stack map[reflect.Type]bool) map[string]string {
 	if typ == nil {
 		return nil
 	}
@@ -312,6 +348,11 @@ func GetCustomMessages(typ reflect.Type) map[string]string {
 	if typ.Kind() != reflect.Struct {
 		return nil
 	}
+	if stack[typ] {
+		return nil
+	}
+	stack[typ] = true
+	defer delete(stack, typ)
 
 	msgs := make(map[string]string)
 	for field := range typ.Fields() {
@@ -322,7 +363,7 @@ func GetCustomMessages(typ reflect.Type) map[string]string {
 		// Recurse into common Aku sections
 		switch field.Name {
 		case "Path", "Query", "Header", "Form", "Body", "Ctx", "Auth":
-			maps.Copy(msgs, GetCustomMessages(field.Type))
+			maps.Copy(msgs, getCustomMessages(field.Type, stack))
 			continue
 		}
 

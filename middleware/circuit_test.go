@@ -194,6 +194,41 @@ func TestCircuitBreakerMiddleware_Allow(t *testing.T) {
 	}
 }
 
+func TestCircuitBreakerMiddleware_StaleSuccessCannotCloseCircuit(t *testing.T) {
+	cb := NewCircuitBreaker(CircuitBreakerConfig{FailureThreshold: 1})
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	var calls atomic.Int32
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := calls.Add(1)
+		entered <- struct{}{}
+		<-release
+		if id == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	mw := CircuitBreakerMiddleware(cb)(handler)
+
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Go(func() {
+			mw.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+		})
+	}
+	for range 2 {
+		<-entered
+	}
+	close(release)
+	wg.Wait()
+
+	if cb.State() != StateOpen {
+		t.Fatalf("expected stale success not to close the breaker, got %s", cb.State())
+	}
+}
+
 func TestCircuitBreakerMiddleware_OpenRejects(t *testing.T) {
 	cb := NewCircuitBreaker(CircuitBreakerConfig{
 		FailureThreshold: 1,

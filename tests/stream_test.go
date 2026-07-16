@@ -92,6 +92,21 @@ func TestStream_PointerStreamType(t *testing.T) {
 	}
 }
 
+func TestStream_NilReaderReturnsServerError(t *testing.T) {
+	app := aku.New()
+	if err := aku.Get(app, "/stream", func(ctx context.Context, in struct{}) (aku.Stream, error) {
+		return aku.Stream{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/stream", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 for nil stream reader, got %d", rec.Code)
+	}
+}
+
 func TestStream_SSE(t *testing.T) {
 	app := aku.New()
 
@@ -140,6 +155,21 @@ func TestStream_PointerSSE(t *testing.T) {
 	expected := "data: pointer\n\n"
 	if rr.Body.String() != expected {
 		t.Errorf("expected %q, got %q", expected, rr.Body.String())
+	}
+}
+
+func TestStream_NilEventsReturnsServerError(t *testing.T) {
+	app := aku.New()
+	if err := aku.Get(app, "/events", func(ctx context.Context, in struct{}) (aku.SSE, error) {
+		return aku.SSE{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/events", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 for nil SSE events, got %d", rec.Code)
 	}
 }
 

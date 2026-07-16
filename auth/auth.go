@@ -18,7 +18,9 @@
 package auth
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 // Bearer is a simple string alias representing a bearer token.
@@ -35,8 +37,7 @@ type APIKey string
 func RequireBearer() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			auth := r.Header.Get("Authorization")
-			if len(auth) < 7 || auth[:7] != "Bearer " || auth[7:] == "" {
+			if !hasBearerCredentials(r.Header.Get("Authorization")) {
 				write401(w, "Missing or invalid bearer token")
 				return
 			}
@@ -60,10 +61,24 @@ func RequireAPIKey(headerName string) func(http.Handler) http.Handler {
 	}
 }
 
+func hasBearerCredentials(value string) bool {
+	parts := strings.Fields(value)
+	return len(parts) == 2 && strings.EqualFold(parts[0], "Bearer")
+}
+
 func write401(w http.ResponseWriter, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set("WWW-Authenticate", "Bearer")
 	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte(
-		`{"type":"about:blank","title":"Unauthorized","status":401,"detail":"` + detail + `"}`,
-	))
+	_ = json.NewEncoder(w).Encode(struct {
+		Type   string `json:"type"`
+		Title  string `json:"title"`
+		Status int    `json:"status"`
+		Detail string `json:"detail"`
+	}{
+		Type:   "about:blank",
+		Title:  "Unauthorized",
+		Status: http.StatusUnauthorized,
+		Detail: detail,
+	})
 }

@@ -95,6 +95,9 @@ func WS[In any, Msg any](
 		if err := extractor(r.Context(), r, in, pooled.val, app.bindConfig); err != nil {
 			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
 				if bindErr.Source == "auth" {
+					if bindErr.Challenge != "" {
+						w.Header().Set("WWW-Authenticate", bindErr.Challenge)
+					}
 					handleError(app, w, r, problem.Unauthorized(bindErr.Err.Error()))
 				} else {
 					handleError(
@@ -153,7 +156,10 @@ func WS[In any, Msg any](
 				closeReason = ""
 				return
 			}
-			for _, observer := range app.errorObservers {
+			app.mu.RLock()
+			observers := slices.Clone(app.errorObservers)
+			app.mu.RUnlock()
+			for _, observer := range observers {
 				observer(r.Context(), err)
 			}
 			return
@@ -173,6 +179,9 @@ func WS[In any, Msg any](
 	}
 
 	fullPattern := r.Prefix() + pattern
+	if err := bind.ValidatePathPattern(fullPattern, schema); err != nil {
+		return err
+	}
 	route := &Route{
 		Method:      "GET", // Handshake is always GET
 		Pattern:     fullPattern,

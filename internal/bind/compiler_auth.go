@@ -9,6 +9,71 @@ import (
 	"strings"
 )
 
+func validateAuthFields(typ reflect.Type) error {
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
+
+		tag := field.Tag.Get("auth")
+		base := field.Type
+		for base.Kind() == reflect.Pointer {
+			base = base.Elem()
+		}
+		isBearer := strings.EqualFold(base.Name(), "Bearer") || tag == "bearer"
+		if isBearer {
+			if !validAuthDestination(field.Type, "Token") {
+				return fmt.Errorf(
+					"auth.%s: bearer credentials cannot be assigned to %s",
+					field.Name,
+					field.Type,
+				)
+			}
+			continue
+		}
+
+		if strings.HasPrefix(tag, "apikey:") {
+			parts := strings.SplitN(tag, ":", 3)
+			if len(parts) != 3 || (parts[1] != "header" && parts[1] != "query") || parts[2] == "" {
+				return fmt.Errorf("auth.%s: invalid API key declaration %q", field.Name, tag)
+			}
+			if !validAuthDestination(field.Type, "Key") {
+				return fmt.Errorf(
+					"auth.%s: API key cannot be assigned to %s",
+					field.Name,
+					field.Type,
+				)
+			}
+			continue
+		}
+
+		if strings.Contains(tag, ":") {
+			return fmt.Errorf("auth.%s: unsupported authentication declaration %q", field.Name, tag)
+		}
+
+		if tag != "" && base.Kind() != reflect.String {
+			return fmt.Errorf("auth.%s: unsupported authentication declaration %q", field.Name, tag)
+		}
+	}
+	return nil
+}
+
+func validAuthDestination(typ reflect.Type, fieldName string) bool {
+	base := typ
+	for base.Kind() == reflect.Pointer {
+		base = base.Elem()
+	}
+	if base.Kind() == reflect.String {
+		return true
+	}
+	if base.Kind() != reflect.Struct {
+		return false
+	}
+	field, ok := base.FieldByName(fieldName)
+	return ok && field.PkgPath == "" && field.Type.Kind() == reflect.String
+}
+
 // compileAuth creates an internalExtractor for the Auth section of the request struct.
 // Auth fields extract authentication credentials (Bearer tokens, API keys) from
 // the request. They don't appear in OpenAPI parameters — instead, they produce
@@ -139,20 +204,22 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 				if auth == "" {
 					if step.required {
 						return &BindError{
-							Field:  step.paramKey,
-							Source: "auth",
-							Err:    errors.New("missing bearer token"),
+							Field:     step.paramKey,
+							Source:    "auth",
+							Err:       errors.New("missing bearer token"),
+							Challenge: "Bearer",
 						}
 					}
 					continue
 				}
-				parts := strings.SplitN(auth, " ", 2)
+				parts := strings.Fields(auth)
 				if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 					if step.required {
 						return &BindError{
-							Field:  step.paramKey,
-							Source: "auth",
-							Err:    errors.New("invalid authorization scheme, expected Bearer"),
+							Field:     step.paramKey,
+							Source:    "auth",
+							Err:       errors.New("invalid authorization scheme, expected Bearer"),
+							Challenge: "Bearer",
 						}
 					}
 					continue
@@ -161,9 +228,10 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 				if token == "" {
 					if step.required {
 						return &BindError{
-							Field:  step.paramKey,
-							Source: "auth",
-							Err:    errors.New("empty bearer token"),
+							Field:     step.paramKey,
+							Source:    "auth",
+							Err:       errors.New("empty bearer token"),
+							Challenge: "Bearer",
 						}
 					}
 					continue

@@ -43,8 +43,12 @@ func StreamSSE(ctx context.Context, _ struct{}) (*aku.SSE, error) {
 func main() {
 	app := aku.New()
 
-	aku.Get(app, "/stream", StreamReader)
-	aku.Get(app, "/events", StreamSSE)
+	if err := aku.Get(app, "/stream", StreamReader); err != nil {
+		log.Fatal(err)
+	}
+	if err := aku.Get(app, "/events", StreamSSE); err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Println("Server running on http://localhost:8080")
 	fmt.Println("Try: curl -N http://localhost:8080/events")

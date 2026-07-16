@@ -96,3 +96,26 @@ func TestApp_Custom404(t *testing.T) {
 		t.Errorf("Expected custom problem title, got %q", prob.Title)
 	}
 }
+
+func TestApp_PreservesCustomServeMuxLike404(t *testing.T) {
+	app := aku.New()
+	app.HandleHTTP(
+		http.MethodGet,
+		"/custom-text-404",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte("404 page not found\n"))
+		}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/custom-text-404", nil)
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", w.Code)
+	}
+	if w.Body.String() != "404 page not found\n" {
+		t.Fatalf("expected custom body to be preserved, got %q", w.Body.String())
+	}
+}

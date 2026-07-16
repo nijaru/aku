@@ -82,11 +82,14 @@ func BuildLinks(rawURL, nextCursor, prevCursor string, limit int) Links {
 	q := u.Query()
 	q.Set("limit", fmt.Sprintf("%d", limit))
 
-	first := *u
-	first.RawQuery = q.Encode()
-
 	self := *u
 	self.RawQuery = q.Encode()
+
+	firstQuery := cloneValues(q)
+	firstQuery.Del("after")
+	firstQuery.Del("before")
+	first := *u
+	first.RawQuery = firstQuery.Encode()
 
 	result := Links{
 		Self:  self.String(),
@@ -95,7 +98,8 @@ func BuildLinks(rawURL, nextCursor, prevCursor string, limit int) Links {
 
 	if nextCursor != "" {
 		next := *u
-		nq := next.Query()
+		nq := cloneValues(q)
+		nq.Del("before")
 		nq.Set("after", nextCursor)
 		nq.Set("limit", fmt.Sprintf("%d", limit))
 		next.RawQuery = nq.Encode()
@@ -104,7 +108,8 @@ func BuildLinks(rawURL, nextCursor, prevCursor string, limit int) Links {
 
 	if prevCursor != "" {
 		prev := *u
-		pq := prev.Query()
+		pq := cloneValues(q)
+		pq.Del("after")
 		pq.Set("before", prevCursor)
 		pq.Set("limit", fmt.Sprintf("%d", limit))
 		prev.RawQuery = pq.Encode()
@@ -112,6 +117,14 @@ func BuildLinks(rawURL, nextCursor, prevCursor string, limit int) Links {
 	}
 
 	return result
+}
+
+func cloneValues(values url.Values) url.Values {
+	clone := make(url.Values, len(values))
+	for key, items := range values {
+		clone[key] = append([]string(nil), items...)
+	}
+	return clone
 }
 
 // BuildPageLinks creates pagination links for offset-based pagination.

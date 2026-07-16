@@ -30,6 +30,16 @@ type ErrorHandler func(w http.ResponseWriter, r *http.Request, err error)
 // with built-in string types, satisfying standard go linters (e.g., SA1029).
 type ContextKey = bind.ContextKey
 
+// RequestSchema describes the request sections and parameters compiled for a route.
+// It is exposed for tooling that inspects Route metadata.
+type RequestSchema = bind.Schema
+
+// RequestParameter describes one compiled request parameter.
+type RequestParameter = bind.Parameter
+
+// RequestAuthScheme describes an authentication scheme inferred from a route input.
+type RequestAuthScheme = bind.AuthScheme
+
 // Binder is the interface that can be implemented by types to customize
 // how they are extracted from path, query, or header parameters.
 type Binder interface {

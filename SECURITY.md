@@ -19,8 +19,9 @@ within 90 days, depending on complexity.
 
 Aku is built on Go's `net/http` standard library and follows these principles:
 
-- **No default unsafe behavior** — Secure defaults for timeouts, body size limits,
-  and CORS.
+- **Bounded server defaults** — `App.Run` sets production-oriented connection
+  timeouts. Request-body limits are application-specific and must be installed
+  with `middleware.BodySizeLimit`.
 - **Middleware opt-in** — Security headers, rate limiting, and CORS are available
   as middleware but must be explicitly configured.
 - **Problem Details (RFC 9457)** — Error responses follow the Problem Details

@@ -102,8 +102,11 @@ func TestHealthChecker_Readiness_OneFails(t *testing.T) {
 	if status.ChecksStatus["database"] != "passed" {
 		t.Fatalf("expected database=passed")
 	}
-	if status.ChecksStatus["redis"] != "failed: connection refused" {
-		t.Fatalf("expected redis to fail with message, got: %s", status.ChecksStatus["redis"])
+	if status.ChecksStatus["redis"] != "failed" {
+		t.Fatalf(
+			"expected redis to fail without exposing details, got: %s",
+			status.ChecksStatus["redis"],
+		)
 	}
 }
 

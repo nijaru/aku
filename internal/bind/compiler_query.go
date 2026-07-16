@@ -36,10 +36,9 @@ func rawQueryLookup(raw, key string) (string, bool) {
 	return "", false
 }
 
-func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]struct{}, []Parameter) {
+func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, []Parameter) {
 	var steps []scalarQueryStep
 	var params []Parameter
-	names := make(map[string]struct{})
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -52,7 +51,7 @@ func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]stru
 		}
 
 		if field.Type.Kind() == reflect.Slice || field.Type.Kind() == reflect.Map {
-			return nil, nil, nil
+			return nil, nil
 		}
 
 		fTyp := field.Type
@@ -66,7 +65,7 @@ func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]stru
 
 		if fTyp.Kind() == reflect.Struct && fTyp != reflect.TypeFor[time.Time]() && !isBinder &&
 			!isText {
-			return nil, nil, nil
+			return nil, nil
 		}
 
 		steps = append(steps, scalarQueryStep{
@@ -75,7 +74,6 @@ func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]stru
 			coercer:  PrecompileCoercer(field.Type),
 			required: fieldRequired(field),
 		})
-		names[tag] = struct{}{}
 		params = append(params, Parameter{
 			Name:     tag,
 			In:       "query",
@@ -87,7 +85,7 @@ func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]stru
 		})
 	}
 
-	return steps, names, params
+	return steps, params
 }
 
 // compileQuery creates an internalExtractor for the Query section of the request struct.
@@ -96,7 +94,7 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error { return nil }, nil
 	}
 
-	if scalarSteps, scalarNames, params := tryCompileScalarQuery(typ); scalarSteps != nil {
+	if scalarSteps, params := tryCompileScalarQuery(typ); scalarSteps != nil {
 		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
 			section := v.Field(sectionIdx)
 			raw := r.URL.RawQuery
@@ -109,19 +107,6 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 					}
 				} else if step.required {
 					return &BindError{Field: step.name, Source: "query", Err: errors.New("is required")}
-				}
-			}
-
-			if cfg.StrictQuery {
-				query := r.URL.Query()
-				for k := range query {
-					if _, ok := scalarNames[k]; !ok {
-						return &BindError{
-							Field:  k,
-							Source: "query",
-							Err:    errors.New("unknown parameter"),
-						}
-					}
 				}
 			}
 
@@ -143,18 +128,6 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 		for _, step := range steps {
 			if err := step(query, section, consumed); err != nil {
 				return err
-			}
-		}
-
-		if cfg.StrictQuery {
-			for k := range query {
-				if _, ok := consumed[k]; !ok {
-					return &BindError{
-						Field:  k,
-						Source: "query",
-						Err:    errors.New("unknown parameter"),
-					}
-				}
 			}
 		}
 

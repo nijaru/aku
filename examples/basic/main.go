@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/middleware"
 )
 
 type Product struct {
@@ -54,11 +56,20 @@ func GetProduct(ctx context.Context, in GetProductRequest) (Product, error) {
 }
 
 func main() {
-	app := aku.New()
+	app := aku.New(
+		aku.WithValidator(validator.New()),
+		aku.WithGlobalMiddleware(
+			middleware.BodySizeLimit(middleware.BodySizeLimitConfig{MaxBodyBytes: 1 << 20}),
+		),
+	)
 
 	// Register routes
-	aku.Post(app, "/products", CreateProduct)
-	aku.Get(app, "/products/{id}", GetProduct)
+	if err := aku.Post(app, "/products", CreateProduct); err != nil {
+		log.Fatal(err)
+	}
+	if err := aku.Get(app, "/products/{id}", GetProduct); err != nil {
+		log.Fatal(err)
+	}
 
 	// Documentation
 	app.OpenAPI("/openapi.json", "Basic Product API", "1.0.0")

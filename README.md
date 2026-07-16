@@ -11,7 +11,7 @@ Aku bridges the gap between the standard library's `net/http` and the ergonomics
 - **Typesafe Extraction**: Automatically map Path, Query, Header, Form, and Body into a single request struct.
 - **Precompiled Extraction Plans**: Reflection inspects handler types at registration; request handling reuses the resulting binding plan and coercers.
 - **Automatic OpenAPI 3.0**: Generates documentation, including schemas and security requirements, from your Go types.
-- **Validation**: Built-in support for `go-playground/validator` tags and explicit `Validate() error` hooks.
+- **Validation**: Support for `go-playground/validator` tags (opt in with `WithValidator`) and explicit `Validate() error` hooks.
 - **Streaming & SSE**: First-class support for `io.Reader` streaming and Server-Sent Events.
 - **Middleware Suite**: Production-ready `Recover`, `Timeout`, and `CORS` implementations.
 - **Integration Testing**: The repo's integration suite uses chainable helpers to keep API assertions readable.
@@ -64,7 +64,9 @@ func main() {
 	app := aku.New()
 
 	// Register a route
-	aku.Get(app, "/greet/{name}", Greet)
+	if err := aku.Get(app, "/greet/{name}", Greet); err != nil {
+		log.Fatal(err)
+	}
 
 	// Serve OpenAPI UI at /docs
 	app.OpenAPI("/openapi.json", "My API", "1.0.0")
@@ -132,13 +134,24 @@ type ListProductsRequest struct {
 }
 ```
 
+Validation tags are enforced when the application is configured with a validator;
+explicit `Validate() error` hooks run without that option:
+
+```go
+app := aku.New(aku.WithValidator(validator.New()))
+```
+
+Typed JSON and form bodies are not size-limited by default because payload budgets
+are application-specific. Add `middleware.BodySizeLimit` before serving routes that
+accept request bodies.
+
 ## Middleware
 
 Use standard `func(http.Handler) http.Handler` middleware at the application or route level.
 
 ```go
 app := aku.New(
-    aku.WithMiddleware(middleware.Recover, middleware.Logger),
+    aku.WithGlobalMiddleware(middleware.Recover, middleware.Logger),
 )
 
 aku.Post(app, "/secure", MyHandler, 
@@ -169,6 +182,9 @@ app.Metrics("/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 
 These routes still participate in application, group, and route middleware, and they still feed
 OpenAPI metadata.
+
+Typed registration returns an error when the input contract or `ServeMux` pattern is invalid;
+check those errors during startup. Static file routes are intentionally not included in OpenAPI.
 
 ## Server Runtime
 

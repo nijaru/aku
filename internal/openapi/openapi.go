@@ -242,7 +242,7 @@ func Generate(
 			}
 			name := baseOutputType.Name()
 			pkg := baseOutputType.PkgPath()
-			if (name == "Reader" && pkg == "io") || (name == "ReadCloser" && pkg == "io") {
+			if outputType.Implements(reflect.TypeFor[io.Reader]()) {
 				mediaType = "application/octet-stream"
 				outSchema = Schema{Type: "string", Format: "binary"}
 			} else if name == "Stream" && (pkg == "github.com/nijaru/aku" || pkg == "aku") {

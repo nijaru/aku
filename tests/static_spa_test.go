@@ -2,6 +2,7 @@ package aku_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,10 +32,15 @@ func TestStaticSPA(t *testing.T) {
 	})
 
 	t.Run("Fallbacks to index.html for extensionless path", func(t *testing.T) {
-		testutil.Test(t, app).
-			Get("/app/users/profile").
-			ExpectStatus(http.StatusOK).
-			ExpectBody("index\n")
+		req := httptest.NewRequest(http.MethodGet, "/app/users/profile", nil)
+		rec := httptest.NewRecorder()
+		app.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || rec.Body.String() != "index\n" {
+			t.Fatalf("expected HTML fallback, got status=%d body=%q", rec.Code, rec.Body.String())
+		}
+		if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+			t.Fatalf("expected HTML content type, got %q", got)
+		}
 	})
 
 	t.Run("Does not fallback for missing file with extension", func(t *testing.T) {
