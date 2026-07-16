@@ -69,8 +69,12 @@ func main() {
 	}
 
 	// Serve OpenAPI UI at /docs
-	app.OpenAPI("/openapi.json", "My API", "1.0.0")
-	app.SwaggerUI("/docs", "/openapi.json")
+	if err := app.OpenAPI("/openapi.json", "My API", "1.0.0"); err != nil {
+		log.Fatal(err)
+	}
+	if err := app.SwaggerUI("/docs", "/openapi.json"); err != nil {
+		log.Fatal(err)
+	}
 
 	log.Println("Serving on :8080")
 	log.Fatal(http.ListenAndServe(":8080", app))
@@ -183,8 +187,9 @@ app.Metrics("/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 These routes still participate in application, group, and route middleware, and they still feed
 OpenAPI metadata.
 
-Typed registration returns an error when the input contract or `ServeMux` pattern is invalid;
-check those errors during startup. Static file routes are intentionally not included in OpenAPI.
+All registration methods return an error when the input contract, `ServeMux` pattern, or route
+conflicts with an existing registration; check those errors during startup. Static file routes are
+intentionally not included in OpenAPI.
 
 ## Server Runtime
 
@@ -209,6 +214,13 @@ HTML rendering, and template engines should be composed as standard
 `net/http` middleware or `http.Handler` routes through `Use`, `WithMiddleware`,
 and `HandleHTTP`. Aku will not force a session store, CSRF library, template
 engine, or application architecture.
+
+For a runnable example that combines typed JSON, multipart upload, webhook input,
+health probes, an embedded SPA, and generated API docs, run:
+
+```bash
+go run ./examples/reference
+```
 
 ## Testing
 

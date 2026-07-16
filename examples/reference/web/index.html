@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aku reference app</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #0b1020;
+      color: #e8edf8;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top right, #263b70, transparent 48%), #0b1020;
+    }
+    main { max-width: 920px; margin: 0 auto; padding: 72px 24px; }
+    .eyebrow { color: #8fb3ff; font-size: .8rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { max-width: 680px; margin: 16px 0; font-size: clamp(2.6rem, 7vw, 5.5rem); line-height: .98; letter-spacing: -.06em; }
+    p { max-width: 620px; color: #b7c1d9; font-size: 1.1rem; line-height: 1.6; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 40px; }
+    .card { padding: 22px; border: 1px solid #2d3b60; border-radius: 18px; background: #111a31cc; box-shadow: 0 18px 48px #05081655; }
+    .card h2 { margin: 0 0 8px; font-size: 1rem; }
+    .card p { margin: 0; font-size: .95rem; }
+    a { color: #a9c4ff; }
+    code { color: #dce7ff; }
+    .status { margin-top: 40px; color: #9eabc5; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Aku · runnable reference</div>
+    <h1>Typesafe APIs with a small, sharp surface.</h1>
+    <p>
+      This embedded page is served by the same <code>net/http</code> application as the
+      typed API, multipart upload, webhook, health, and OpenAPI endpoints.
+    </p>
+    <section class="grid" aria-label="Reference links">
+      <article class="card">
+        <h2><a href="/docs">Swagger UI</a></h2>
+        <p>Explore and try the generated API contract.</p>
+      </article>
+      <article class="card">
+        <h2><a href="/redoc">ReDoc</a></h2>
+        <p>Read the same contract in a reference-style layout.</p>
+      </article>
+      <article class="card">
+        <h2><a href="/openapi.json">OpenAPI JSON</a></h2>
+        <p>Inspect the machine-readable document generated from Go types.</p>
+      </article>
+      <article class="card">
+        <h2><a href="/health">Liveness</a> · <a href="/ready">Readiness</a></h2>
+        <p>Probe the built-in operational endpoints.</p>
+      </article>
+    </section>
+    <div class="status">Try <code>GET /api/version</code> or open the docs to exercise the API.</div>
+  </main>
+</body>
+</html>
