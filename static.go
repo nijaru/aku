@@ -2,6 +2,7 @@ package aku
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"path"
@@ -9,13 +10,15 @@ import (
 )
 
 // Static registers a directory of static files to be served at the given prefix.
-func (a *App) Static(prefix, root string, opts ...RouteOption) {
-	a.staticFS(prefix, http.Dir(root), nil, opts...)
+// Registration errors are returned to the caller.
+func (a *App) Static(prefix, root string, opts ...RouteOption) error {
+	return a.staticFS(prefix, http.Dir(root), nil, opts...)
 }
 
 // StaticFS registers a file system of static files to be served at the given prefix.
-func (a *App) StaticFS(prefix string, fs http.FileSystem, opts ...RouteOption) {
-	a.staticFS(prefix, fs, nil, opts...)
+// Registration errors are returned to the caller.
+func (a *App) StaticFS(prefix string, fs http.FileSystem, opts ...RouteOption) error {
+	return a.staticFS(prefix, fs, nil, opts...)
 }
 
 func (a *App) staticFS(
@@ -23,7 +26,10 @@ func (a *App) staticFS(
 	fs http.FileSystem,
 	parentMiddleware []func(http.Handler) http.Handler,
 	opts ...RouteOption,
-) {
+) error {
+	if fs == nil {
+		return errors.New("static file system must not be nil")
+	}
 	meta := defaultRouteMeta()
 	for _, opt := range opts {
 		opt(&meta)
@@ -31,10 +37,14 @@ func (a *App) staticFS(
 
 	// Go 1.22 mux routing requires matching exact paths or directories with trailing slashes.
 	pattern := prefix
+	registrations := make([]handlerRegistration, 0, 2)
 	if !strings.HasSuffix(pattern, "/") {
 		redirect := http.RedirectHandler(pattern+"/", http.StatusMovedPermanently)
 		redirect = wrapHandler(redirect, parentMiddleware)
-		a.registerHandler("GET "+pattern, redirect)
+		registrations = append(registrations, handlerRegistration{
+			pattern: "GET " + pattern,
+			handler: redirect,
+		})
 		pattern += "/"
 	}
 
@@ -53,16 +63,23 @@ func (a *App) staticFS(
 	handler = wrapHandler(handler, meta.middleware)
 	handler = wrapHandler(handler, parentMiddleware)
 
-	// We use a.mux.Handle directly here to support subtree matching (trailing slash).
-	a.registerHandler("GET "+pattern, handler)
+	// Register the exact-prefix redirect and subtree together so static routes
+	// preserve Aku's documented 301 behavior without partial registration.
+	registrations = append(registrations, handlerRegistration{
+		pattern: "GET " + pattern,
+		handler: handler,
+	})
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.registerHandlersLocked(registrations...)
 }
 
-func (g *Group) Static(prefix, root string, opts ...RouteOption) {
-	g.app.staticFS(g.prefix+prefix, http.Dir(root), g.middleware, opts...)
+func (g *Group) Static(prefix, root string, opts ...RouteOption) error {
+	return g.app.staticFS(g.prefix+prefix, http.Dir(root), g.middleware, opts...)
 }
 
-func (g *Group) StaticFS(prefix string, fs http.FileSystem, opts ...RouteOption) {
-	g.app.staticFS(g.prefix+prefix, fs, g.middleware, opts...)
+func (g *Group) StaticFS(prefix string, fs http.FileSystem, opts ...RouteOption) error {
+	return g.app.staticFS(g.prefix+prefix, fs, g.middleware, opts...)
 }
 
 type spaHandler struct {

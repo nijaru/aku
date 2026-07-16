@@ -72,8 +72,12 @@ func main() {
 	}
 
 	// Documentation
-	app.OpenAPI("/openapi.json", "Basic Product API", "1.0.0")
-	app.SwaggerUI("/docs", "/openapi.json")
+	if err := app.OpenAPI("/openapi.json", "Basic Product API", "1.0.0"); err != nil {
+		log.Fatal(err)
+	}
+	if err := app.SwaggerUI("/docs", "/openapi.json"); err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Println("Server running on http://localhost:8080")
 	fmt.Println("API Docs available at http://localhost:8080/docs")

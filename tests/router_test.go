@@ -199,6 +199,56 @@ func TestHandleWithoutMetadataIsExcludedFromOpenAPI(t *testing.T) {
 	}
 }
 
+func TestRegistrationMethodsReturnErrors(t *testing.T) {
+	app := aku.New()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	if err := app.HandleHTTP(http.MethodGet, "/raw", handler); err != nil {
+		t.Fatalf("unexpected raw handler registration error: %v", err)
+	}
+	if err := app.HandleHTTP(http.MethodGet, "/raw", handler); err == nil {
+		t.Fatal("expected duplicate raw handler registration to return an error")
+	}
+
+	if err := app.Metrics("/metrics", handler); err != nil {
+		t.Fatalf("unexpected metrics registration error: %v", err)
+	}
+	if err := app.OpenAPI("/openapi.json", "API", "1.0.0"); err != nil {
+		t.Fatalf("unexpected OpenAPI registration error: %v", err)
+	}
+	if err := app.OpenAPI("/openapi.json", "API", "1.0.0"); err == nil {
+		t.Fatal("expected duplicate OpenAPI registration to return an error")
+	}
+	if err := app.SwaggerUI("/docs", "/openapi.json"); err != nil {
+		t.Fatalf("unexpected Swagger UI registration error: %v", err)
+	}
+	if err := app.RedocUI("/redoc", "/openapi.json"); err != nil {
+		t.Fatalf("unexpected Redoc registration error: %v", err)
+	}
+	if err := app.StaticFS("/assets", nil); err == nil {
+		t.Fatal("expected nil static file system to return an error")
+	}
+	if err := app.HandleHTTP(http.MethodGet, "/partial", handler); err != nil {
+		t.Fatalf("unexpected setup route registration error: %v", err)
+	}
+	if err := app.StaticFS("/partial", http.Dir(".")); err == nil {
+		t.Fatal("expected conflicting static route registration to return an error")
+	}
+	partial := httptest.NewRecorder()
+	app.ServeHTTP(partial, httptest.NewRequest(http.MethodGet, "/partial/test", nil))
+	if partial.Code != http.StatusNotFound {
+		t.Fatalf("failed static registration partially changed the mux: got %d", partial.Code)
+	}
+
+	group := app.Group("/v1")
+	if err := group.HandleHTTP(http.MethodGet, "/raw", handler); err != nil {
+		t.Fatalf("unexpected group handler registration error: %v", err)
+	}
+	if err := group.Metrics("/metrics", handler); err != nil {
+		t.Fatalf("unexpected group metrics registration error: %v", err)
+	}
+}
+
 func TestFlushCommitsSuccessfulStatus(t *testing.T) {
 	app := aku.New()
 	app.HandleHTTP(

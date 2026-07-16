@@ -31,10 +31,16 @@
 //
 //	func main() {
 //	    app := aku.New()
-//	    aku.Get(app, "/greet/{name}", Greet)
-//	    app.OpenAPI("/openapi.json", "My API", "1.0.0")
-//	    app.SwaggerUI("/docs", "/openapi.json")
-//	    app.Run(":8080")
+//	    if err := aku.Get(app, "/greet/{name}", Greet); err != nil {
+//	        log.Fatal(err)
+//	    }
+//	    if err := app.OpenAPI("/openapi.json", "My API", "1.0.0"); err != nil {
+//	        log.Fatal(err)
+//	    }
+//	    if err := app.SwaggerUI("/docs", "/openapi.json"); err != nil {
+//	        log.Fatal(err)
+//	    }
+//	    log.Fatal(app.Run(":8080"))
 //	}
 //
 // # Features
@@ -51,6 +57,7 @@ package aku
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -69,6 +76,7 @@ import (
 type App struct {
 	mu                 sync.RWMutex
 	mux                *http.ServeMux
+	registrations      map[string]http.Handler
 	handler            http.Handler
 	middleware         []func(http.Handler) http.Handler
 	routes             []*Route
@@ -90,6 +98,7 @@ type App struct {
 func New(opts ...Option) *App {
 	a := &App{
 		mux:                http.NewServeMux(),
+		registrations:      make(map[string]http.Handler),
 		securitySchemes:    make(map[string]SecurityScheme),
 		MaxMultipartMemory: 32 << 20, // 32MB default
 		ShutdownTimeout:    30 * time.Second,
@@ -131,21 +140,71 @@ func (a *App) Group(prefix string, mw ...func(http.Handler) http.Handler) *Group
 	}
 }
 
-// Handle implements the Router interface.
-func (a *App) Handle(method, pattern string, handler http.Handler, route *Route) {
+// Handle implements the Router interface. It returns an error when the
+// pattern conflicts with an existing route or is otherwise invalid.
+func (a *App) Handle(method, pattern string, handler http.Handler, route *Route) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.mux.Handle(method+" "+pattern, handler)
+	if err := a.registerHandlersLocked(handlerRegistration{
+		pattern: method + " " + pattern,
+		handler: handler,
+	}); err != nil {
+		return err
+	}
 	if route != nil {
 		a.routes = append(a.routes, route)
 		a.openapiVersion++
 	}
+	return nil
 }
 
-func (a *App) registerHandler(pattern string, handler http.Handler) {
+func (a *App) registerHandler(pattern string, handler http.Handler) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.mux.Handle(pattern, handler)
+	return a.registerHandlersLocked(handlerRegistration{pattern: pattern, handler: handler})
+}
+
+type handlerRegistration struct {
+	pattern string
+	handler http.Handler
+}
+
+// registerHandlersLocked validates all new patterns against the current mux
+// before mutating it. Static routes need two patterns (the exact-prefix
+// redirect and the trailing-slash subtree), so treating registration as a
+// batch prevents a failed second pattern from leaving a partial route behind.
+func (a *App) registerHandlersLocked(registrations ...handlerRegistration) error {
+	if len(registrations) == 0 {
+		return nil
+	}
+
+	preflight := http.NewServeMux()
+	for pattern, handler := range a.registrations {
+		if err := registerMuxHandler(preflight, pattern, handler); err != nil {
+			return err
+		}
+	}
+	for _, registration := range registrations {
+		if err := registerMuxHandler(preflight, registration.pattern, registration.handler); err != nil {
+			return err
+		}
+	}
+
+	for _, registration := range registrations {
+		a.mux.Handle(registration.pattern, registration.handler)
+		a.registrations[registration.pattern] = registration.handler
+	}
+	return nil
+}
+
+func registerMuxHandler(mux *http.ServeMux, pattern string, handler http.Handler) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("register pattern %q: %v", pattern, recovered)
+		}
+	}()
+	mux.Handle(pattern, handler)
+	return nil
 }
 
 func (a *App) handleHTTP(
@@ -153,7 +212,12 @@ func (a *App) handleHTTP(
 	handler http.Handler,
 	parentMiddleware []func(http.Handler) http.Handler,
 	opts ...RouteOption,
-) {
+) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("register %s route %q: %v", method, pattern, recovered)
+		}
+	}()
 	meta := defaultRouteMeta()
 	for _, opt := range opts {
 		opt(&meta)
@@ -181,22 +245,30 @@ func (a *App) handleHTTP(
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.mux.Handle(method+" "+pattern, finalHandler)
+	if err := a.registerHandlersLocked(handlerRegistration{
+		pattern: method + " " + pattern,
+		handler: finalHandler,
+	}); err != nil {
+		return err
+	}
 	a.routes = append(a.routes, route)
 	a.openapiVersion++
+	return nil
 }
 
 // HandleHTTP registers a standard http.Handler on the application's multiplexer.
 // This is useful for integrating third-party handlers like Prometheus or health checks
 // that don't follow the typed Handler[In, Out] pattern. Route options such as
-// middleware, status, tags, and security are still applied.
-func (a *App) HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption) {
-	a.handleHTTP(method, pattern, handler, nil, opts...)
+// middleware, status, tags, and security are still applied. Registration errors
+// are returned to the caller.
+func (a *App) HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption) error {
+	return a.handleHTTP(method, pattern, handler, nil, opts...)
 }
 
 // Metrics registers a standard http.Handler for serving metrics (e.g., Prometheus).
-func (a *App) Metrics(pattern string, handler http.Handler, opts ...RouteOption) {
-	a.handleHTTP(http.MethodGet, pattern, handler, nil, opts...)
+// Registration errors are returned to the caller.
+func (a *App) Metrics(pattern string, handler http.Handler, opts ...RouteOption) error {
+	return a.handleHTTP(http.MethodGet, pattern, handler, nil, opts...)
 }
 
 func (a *App) App() *App                                     { return a }

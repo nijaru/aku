@@ -22,14 +22,14 @@ type Handler[In any, Out any] func(context.Context, In) (Out, error)
 
 // Router is the interface implemented by App and Group for route registration.
 type Router interface {
-	Handle(method, pattern string, handler http.Handler, route *Route)
-	HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption)
-	Metrics(pattern string, handler http.Handler, opts ...RouteOption)
+	Handle(method, pattern string, handler http.Handler, route *Route) error
+	HandleHTTP(method, pattern string, handler http.Handler, opts ...RouteOption) error
+	Metrics(pattern string, handler http.Handler, opts ...RouteOption) error
 	App() *App
 	Prefix() string
 	Middleware() []func(http.Handler) http.Handler
-	Static(prefix, root string, opts ...RouteOption)
-	StaticFS(prefix string, fs http.FileSystem, opts ...RouteOption)
+	Static(prefix, root string, opts ...RouteOption) error
+	StaticFS(prefix string, fs http.FileSystem, opts ...RouteOption) error
 }
 
 func wrapHandler(handler http.Handler, middleware []func(http.Handler) http.Handler) http.Handler {
@@ -343,8 +343,7 @@ func registerRoute(
 			err = fmt.Errorf("register %s route %q: %v", method, pattern, recovered)
 		}
 	}()
-	r.Handle(method, pattern, handler, route)
-	return nil
+	return r.Handle(method, pattern, handler, route)
 }
 
 func registerAuthSecurity(app *App, route *Route, auths []bind.AuthScheme) {

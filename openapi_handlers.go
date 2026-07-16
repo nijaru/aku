@@ -34,18 +34,21 @@ func (a *App) OpenAPIDocument(title, version string) *openapi.Document {
 }
 
 // OpenAPI registers an endpoint that serves the OpenAPI JSON specification.
-func (a *App) OpenAPI(pattern, title, version string) {
-	a.registerHandler("GET "+pattern, a.OpenAPIHandler(title, version))
+// Registration errors are returned to the caller.
+func (a *App) OpenAPI(pattern, title, version string) error {
+	return a.registerHandler("GET "+pattern, a.OpenAPIHandler(title, version))
 }
 
 // SwaggerUI registers an endpoint that serves the Swagger UI.
-func (a *App) SwaggerUI(pattern, specURL string) {
-	a.registerHandler("GET "+pattern, a.SwaggerUIHandler(specURL))
+// Registration errors are returned to the caller.
+func (a *App) SwaggerUI(pattern, specURL string) error {
+	return a.registerHandler("GET "+pattern, a.SwaggerUIHandler(specURL))
 }
 
 // RedocUI registers an endpoint that serves the Redoc UI.
-func (a *App) RedocUI(pattern, specURL string) {
-	a.registerHandler("GET "+pattern, a.RedocUIHandler(specURL))
+// Registration errors are returned to the caller.
+func (a *App) RedocUI(pattern, specURL string) error {
+	return a.registerHandler("GET "+pattern, a.RedocUIHandler(specURL))
 }
 
 // OpenAPIHandler returns an http.Handler that serves the OpenAPI JSON specification.
