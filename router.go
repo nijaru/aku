@@ -229,7 +229,17 @@ func register[In any, Out any](
 
 		// Handle streaming and special types
 		if isReader {
-			render.Reader(w, meta.status, any(out).(io.Reader), "application/octet-stream")
+			reader, ok := any(out).(io.Reader)
+			if !ok || isNilReader(reader) {
+				handleError(
+					app,
+					w,
+					r,
+					problem.InternalServerError("reader response is nil"),
+				)
+				return
+			}
+			render.Reader(w, meta.status, reader, "application/octet-stream")
 			return
 		}
 		if isStream {
@@ -460,5 +470,18 @@ func sseResponse(out any) (SSE, bool) {
 		return *s, true
 	default:
 		return SSE{}, false
+	}
+}
+
+func isNilReader(reader io.Reader) bool {
+	if reader == nil {
+		return true
+	}
+	value := reflect.ValueOf(reader)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
 	}
 }

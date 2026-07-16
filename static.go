@@ -40,6 +40,7 @@ func (a *App) staticFS(
 	registrations := make([]handlerRegistration, 0, 2)
 	if !strings.HasSuffix(pattern, "/") {
 		redirect := http.RedirectHandler(pattern+"/", http.StatusMovedPermanently)
+		redirect = wrapHandler(redirect, meta.middleware)
 		redirect = wrapHandler(redirect, parentMiddleware)
 		registrations = append(registrations, handlerRegistration{
 			pattern: "GET " + pattern,

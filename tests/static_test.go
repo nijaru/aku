@@ -103,3 +103,32 @@ func TestGroup_Static(t *testing.T) {
 		t.Fatalf("expected group middleware to wrap static route, got %d calls", middlewareCalls)
 	}
 }
+
+func TestStaticPrefixRedirectUsesRouteMiddleware(t *testing.T) {
+	app := aku.New()
+	tmpDir, err := os.MkdirTemp("", "aku-static-redirect-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	var calls int
+	middleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			next.ServeHTTP(w, r)
+		})
+	}
+	if err := app.Static("/private", tmpDir, aku.WithMiddleware(middleware)); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/private", nil))
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("expected 301 redirect, got %d", rec.Code)
+	}
+	if calls != 1 {
+		t.Fatalf("expected route middleware on exact-prefix redirect, got %d calls", calls)
+	}
+}

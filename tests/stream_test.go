@@ -1,6 +1,7 @@
 package aku_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -35,6 +36,21 @@ func TestStream_Reader(t *testing.T) {
 	// unless we find a better way.
 	if rr.Header().Get("Content-Type") != "application/octet-stream" {
 		t.Errorf("expected application/octet-stream, got %q", rr.Header().Get("Content-Type"))
+	}
+}
+
+func TestStream_NilReaderReturnsProblem(t *testing.T) {
+	app := aku.New()
+	if err := aku.Get(app, "/stream", func(ctx context.Context, in any) (*bytes.Reader, error) {
+		return nil, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/stream", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected nil reader to produce 500, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

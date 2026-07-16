@@ -41,6 +41,8 @@ func (g *Group) Metrics(pattern string, handler http.Handler, opts ...RouteOptio
 	return g.HandleHTTP(http.MethodGet, pattern, handler, opts...)
 }
 
-func (g *Group) App() *App                                     { return g.app }
-func (g *Group) Prefix() string                                { return g.prefix }
-func (g *Group) Middleware() []func(http.Handler) http.Handler { return g.middleware }
+func (g *Group) App() *App      { return g.app }
+func (g *Group) Prefix() string { return g.prefix }
+func (g *Group) Middleware() []func(http.Handler) http.Handler {
+	return slices.Clone(g.middleware)
+}

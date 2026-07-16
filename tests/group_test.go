@@ -112,3 +112,14 @@ func TestGroupHandleHTTP(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupMiddlewareReturnsCopy(t *testing.T) {
+	middleware := func(next http.Handler) http.Handler { return next }
+	group := aku.New().Group("/v1", middleware)
+
+	got := group.Middleware()
+	got[0] = nil
+	if group.Middleware()[0] == nil {
+		t.Fatal("mutating Middleware result changed the group's middleware")
+	}
+}

@@ -177,6 +177,14 @@ func (a *App) registerHandlersLocked(registrations ...handlerRegistration) error
 	if len(registrations) == 0 {
 		return nil
 	}
+	if len(registrations) == 1 {
+		registration := registrations[0]
+		if err := registerMuxHandler(a.mux, registration.pattern, registration.handler); err != nil {
+			return err
+		}
+		a.registrations[registration.pattern] = registration.handler
+		return nil
+	}
 
 	preflight := http.NewServeMux()
 	for pattern, handler := range a.registrations {

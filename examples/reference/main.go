@@ -91,10 +91,10 @@ func receiveWebhook(_ context.Context, in webhookRequest) (map[string]string, er
 	}, nil
 }
 
-func main() {
+func newApp() (*aku.App, error) {
 	webRoot, err := fs.Sub(webFiles, "web")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	checks := middleware.NewHealthChecker()
@@ -110,12 +110,6 @@ func main() {
 		),
 	)
 	app.Use(checks.Middleware)
-	app.AddSecurityScheme("BearerAuth", aku.SecurityScheme{
-		Type:         "http",
-		Scheme:       "bearer",
-		BearerFormat: "JWT",
-	})
-
 	if err := aku.Post(
 		app,
 		"/api/items/{id}",
@@ -123,9 +117,8 @@ func main() {
 		aku.WithStatus(http.StatusCreated),
 		aku.WithSummary("Create an item"),
 		aku.WithTag("Items"),
-		aku.WithSecurityName("BearerAuth"),
 	); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err := aku.Post(
 		app,
@@ -134,7 +127,7 @@ func main() {
 		aku.WithSummary("Upload a text file"),
 		aku.WithTag("Uploads"),
 	); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err := aku.Post(
 		app,
@@ -143,7 +136,7 @@ func main() {
 		aku.WithSummary("Receive a provider webhook"),
 		aku.WithTag("Webhooks"),
 	); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err := app.HandleHTTP(
 		http.MethodGet,
@@ -154,21 +147,28 @@ func main() {
 		}),
 		aku.WithSummary("Show the running example version"),
 	); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err := app.StaticFS("/web", http.FS(webRoot), aku.WithSPA()); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err := app.OpenAPI("/openapi.json", "Aku Reference API", "1.0.0"); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err := app.SwaggerUI("/docs", "/openapi.json"); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err := app.RedocUI("/redoc", "/openapi.json"); err != nil {
+		return nil, err
+	}
+	return app, nil
+}
+
+func main() {
+	app, err := newApp()
+	if err != nil {
 		log.Fatal(err)
 	}
-
 	log.Println("Aku reference app listening on http://localhost:8080/web/")
 	log.Println("API docs available at http://localhost:8080/docs")
 	log.Fatal(app.Run(":8080"))

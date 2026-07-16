@@ -13,7 +13,8 @@ Aku bridges the gap between the standard library's `net/http` and the ergonomics
 - **Automatic OpenAPI 3.0**: Generates documentation, including schemas and security requirements, from your Go types.
 - **Validation**: Support for `go-playground/validator` tags (opt in with `WithValidator`) and explicit `Validate() error` hooks.
 - **Streaming & SSE**: First-class support for `io.Reader` streaming and Server-Sent Events.
-- **Middleware Suite**: Production-ready `Recover`, `Timeout`, and `CORS` implementations.
+- **Middleware Suite**: Recovery, timeouts, CORS, compression, security headers, rate limiting,
+  circuit breaking, health checks, and OpenTelemetry hooks.
 - **Integration Testing**: The repo's integration suite uses chainable helpers to keep API assertions readable.
 
 ## Performance
@@ -170,18 +171,22 @@ Aku keeps `http.Handler` compatibility for endpoints that do not need a typed re
 is a shorthand for read-only GET endpoints such as `/metrics`.
 
 ```go
-app.HandleHTTP(
-    http.MethodGet,
-    "/healthz",
-    http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.WriteHeader(http.StatusNoContent)
-    }),
-    aku.WithSummary("Health check"),
-)
+if err := app.HandleHTTP(
+	http.MethodGet,
+	"/healthz",
+	http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}),
+	aku.WithSummary("Health check"),
+); err != nil {
+	log.Fatal(err)
+}
 
-app.Metrics("/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    w.WriteHeader(http.StatusOK)
-}))
+if err := app.Metrics("/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+})); err != nil {
+	log.Fatal(err)
+}
 ```
 
 These routes still participate in application, group, and route middleware, and they still feed

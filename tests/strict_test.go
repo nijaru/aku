@@ -139,6 +139,29 @@ func TestStrictHeaderAllowsTypedBearerAuth(t *testing.T) {
 	}
 }
 
+func TestStrictHeaderAllowsMiddlewareAuthAndCookies(t *testing.T) {
+	app := aku.New(aku.WithStrictHeader())
+	app.Use(auth.RequireBearer())
+	if err := aku.Get(app, "/test", func(ctx context.Context, in struct{}) (string, error) {
+		return "ok", nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("Cookie", "session=present")
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf(
+			"expected middleware auth and cookie headers to pass strict mode, got %d: %s",
+			rec.Code,
+			rec.Body.String(),
+		)
+	}
+}
+
 func TestStrictQueryAllowsAPIKeyAuth(t *testing.T) {
 	type In struct {
 		Auth struct {

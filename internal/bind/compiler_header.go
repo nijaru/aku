@@ -51,7 +51,8 @@ func isStandardHeader(h string) bool {
 	standard := []string{
 		"accept", "accept-charset", "accept-encoding", "accept-language",
 		"accept-patch", "accept-post", "accept-ranges", "age", "cache-control",
-		"connection", "content-encoding", "content-language", "content-length",
+		"authorization", "connection", "content-encoding", "content-language", "cookie",
+		"content-length",
 		"content-location", "content-md5", "content-range", "content-type",
 		"date", "expect", "forwarded", "host", "if-match", "if-modified-since",
 		"if-none-match", "if-range", "if-unmodified-since", "keep-alive",
