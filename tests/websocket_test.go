@@ -10,6 +10,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/nijaru/aku"
+	"github.com/nijaru/aku/auth"
 	"github.com/nijaru/aku/middleware"
 )
 
@@ -88,4 +89,72 @@ func TestWebsocket(t *testing.T) {
 			t.Errorf("expected 'echo: hello', got '%s'", echo.Text)
 		}
 	})
+}
+
+func TestWebsocketAuthAppearsInOpenAPI(t *testing.T) {
+	app := aku.New()
+	type In struct {
+		Auth struct {
+			Token auth.Bearer
+			Key   auth.APIKey `auth:"apikey:header:X-API-Key"`
+		}
+	}
+
+	if err := aku.WS(app, "/chat", func(ctx context.Context, in In, ws *aku.Websocket[WSMessage]) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("unexpected registration error: %v", err)
+	}
+
+	doc := app.OpenAPIDocument("Chat API", "1.0.0")
+	scheme, ok := doc.Components.SecuritySchemes["Token"]
+	if !ok {
+		t.Fatal("expected websocket bearer scheme in OpenAPI components")
+	}
+	if scheme.Type != "http" || scheme.Scheme != "bearer" {
+		t.Fatalf("unexpected websocket security scheme: %+v", scheme)
+	}
+	security := doc.Paths["/chat"]["get"].Security
+	if len(security) != 1 {
+		t.Fatalf("expected websocket security requirement, got %+v", security)
+	}
+	if _, ok := security[0]["Token"]; !ok {
+		t.Fatalf("expected Token security requirement, got %+v", security)
+	}
+	if _, ok := security[0]["Key"]; !ok {
+		t.Fatalf("expected Key security requirement, got %+v", security)
+	}
+	if security[0]["Token"] == nil || security[0]["Key"] == nil {
+		t.Fatalf("security scopes must be JSON arrays, got %+v", security[0])
+	}
+}
+
+func TestWebsocketAuthFailureIsUnauthorized(t *testing.T) {
+	app := aku.New()
+	type In struct {
+		Auth struct {
+			Token auth.Bearer
+		}
+	}
+
+	if err := aku.WS(app, "/chat", func(ctx context.Context, in In, ws *aku.Websocket[WSMessage]) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("unexpected registration error: %v", err)
+	}
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	url := strings.Replace(srv.URL, "http", "ws", 1) + "/chat"
+	_, resp, err := websocket.Dial(context.Background(), url, nil)
+	if err == nil {
+		t.Fatal("expected websocket handshake to fail")
+	}
+	if resp == nil {
+		t.Fatalf("expected failed handshake response, got nil: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
 }

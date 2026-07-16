@@ -15,8 +15,9 @@ func TestOpenAPI_Examples(t *testing.T) {
 			Search string `query:"search" example:"gopher"`
 		}
 		Body struct {
-			Name string `json:"name" example:"Nick"`
-			Age  int    `json:"age" example:"30"`
+			Name     string `json:"name" example:"Nick"`
+			Age      int    `json:"age" example:"30"`
+			Optional string `json:"optional,omitempty"`
 		}
 	}
 

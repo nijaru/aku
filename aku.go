@@ -41,7 +41,7 @@
 //
 //   - Typesafe request extraction from Path, Query, Header, Form, Body, and Context
 //   - Automatic OpenAPI 3.0 generation from Go types
-//   - Zero-reflection hot path with pre-compiled extraction plans
+//   - Precompiled extraction plans and coercers for lower request-time overhead
 //   - Built-in validation via go-playground/validator
 //   - Middleware suite: logging, recovery, timeout, CORS, compression, rate limiting, security headers
 //   - Streaming support: io.Reader, Server-Sent Events, WebSockets
@@ -187,7 +187,7 @@ func (a *App) Middleware() []func(http.Handler) http.Handler { return nil }
 
 // Routes returns the list of registered routes and their metadata.
 func (a *App) Routes() []*Route {
-	return a.routes
+	return slices.Clone(a.routes)
 }
 
 // AddSecurityScheme adds a security scheme to the application.
@@ -213,6 +213,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	iw := errorInterceptorPool.Get().(*errorInterceptor)
 	iw.ResponseWriter = w
 	iw.status = 0
+	iw.statusSet = false
 	iw.written = false
 	iw.intercepted = false
 	iw.hijacked = false
@@ -245,16 +246,18 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type errorInterceptor struct {
 	http.ResponseWriter
 	status      int
+	statusSet   bool
 	written     bool
 	intercepted bool
 	hijacked    bool
 }
 
 func (i *errorInterceptor) WriteHeader(status int) {
-	if i.written || i.hijacked {
+	if i.statusSet || i.written || i.hijacked {
 		return
 	}
 	i.status = status
+	i.statusSet = true
 	if status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
 		i.written = true
 		i.ResponseWriter.WriteHeader(status)
@@ -299,6 +302,16 @@ func (i *errorInterceptor) Unwrap() http.ResponseWriter {
 }
 
 func (i *errorInterceptor) Flush() {
+	if !i.statusSet {
+		i.status = http.StatusOK
+		i.statusSet = true
+	}
+	if !i.written {
+		if i.status == http.StatusNotFound || i.status == http.StatusMethodNotAllowed {
+			i.ResponseWriter.WriteHeader(i.status)
+		}
+		i.written = true
+	}
 	if f, ok := i.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

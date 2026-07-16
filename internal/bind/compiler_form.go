@@ -30,6 +30,9 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 		tag := field.Tag.Get("form")
 		if tag == "" {
 			continue
@@ -124,6 +127,12 @@ func compileForm(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 						f.Set(reflect.ValueOf(files[0]))
 					}
 				} else if info.required {
+					return &BindError{Field: info.name, Source: "form", Err: errors.New("is required")}
+				}
+			}
+		} else {
+			for _, info := range fileInfos {
+				if info.required {
 					return &BindError{Field: info.name, Source: "form", Err: errors.New("is required")}
 				}
 			}

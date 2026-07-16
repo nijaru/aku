@@ -49,6 +49,12 @@ func WS[In any, Msg any](
 ) error {
 	app := r.App()
 	meta := defaultRouteMeta()
+	if handler == nil {
+		return errors.New("websocket handler must not be nil")
+	}
+	if err := bind.Validate[In](); err != nil {
+		return err
+	}
 
 	// Compile the extractor and schema once at startup.
 	extractor, schema := bind.Compiler[In]()
@@ -88,14 +94,18 @@ func WS[In any, Msg any](
 		// 1. Extract and bind parameters from the handshake request.
 		if err := extractor(r.Context(), r, in, pooled.val, app.bindConfig); err != nil {
 			if bindErr, ok := errors.AsType[*bind.BindError](err); ok {
-				handleError(
-					app,
-					w,
-					r,
-					problem.ValidationProblem("Handshake extraction failed", []problem.InvalidParam{
-						{Name: bindErr.Field, In: bindErr.Source, Reason: bindErr.Err.Error()},
-					}),
-				)
+				if bindErr.Source == "auth" {
+					handleError(app, w, r, problem.Unauthorized(bindErr.Err.Error()))
+				} else {
+					handleError(
+						app,
+						w,
+						r,
+						problem.ValidationProblem("Handshake extraction failed", []problem.InvalidParam{
+							{Name: bindErr.Field, In: bindErr.Source, Reason: bindErr.Err.Error()},
+						}),
+					)
+				}
 			} else {
 				handleError(app, w, r, err)
 			}
@@ -181,7 +191,11 @@ func WS[In any, Msg any](
 		),
 	}
 
-	r.Handle("GET", pattern, finalHandler, route)
+	if err := registerRoute(r, "GET", pattern, finalHandler, route); err != nil {
+		return err
+	}
+
+	registerAuthSecurity(app, route, schema.Auth)
 	return nil
 }
 

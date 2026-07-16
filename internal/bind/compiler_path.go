@@ -22,6 +22,9 @@ func compilePath(sectionIdx int, typ reflect.Type) (internalExtractor, []Paramet
 	var params []Parameter
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 		tag := field.Tag.Get("path")
 		if tag != "" {
 			infos = append(infos, fieldInfo{

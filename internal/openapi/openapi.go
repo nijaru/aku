@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nijaru/aku/internal/bind"
 )
@@ -87,6 +88,8 @@ type Schema struct {
 	Maximum              *float64          `json:"maximum,omitempty"`
 	MinLength            *int              `json:"minLength,omitempty"`
 	MaxLength            *int              `json:"maxLength,omitempty"`
+	MinItems             *int              `json:"minItems,omitempty"`
+	MaxItems             *int              `json:"maxItems,omitempty"`
 	Pattern              string            `json:"pattern,omitempty"`
 	Enum                 []any             `json:"enum,omitempty"`
 	Example              any               `json:"example,omitempty"`
@@ -270,16 +273,26 @@ type generator struct {
 }
 
 func (g *generator) reflectToSchema(t reflect.Type) Schema {
+	if t == nil {
+		return Schema{}
+	}
+
+	original := t
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
+	}
+
+	if original.Implements(reflect.TypeFor[io.Reader]()) ||
+		reflect.PointerTo(t).Implements(reflect.TypeFor[io.Reader]()) {
+		return Schema{Type: "string", Format: "binary"}
 	}
 
 	// Special check for common binary types
 	if t.Name() == "FileHeader" && t.PkgPath() == "mime/multipart" {
 		return Schema{Type: "string", Format: "binary"}
 	}
-	if t.Implements(reflect.TypeFor[io.Reader]()) {
-		return Schema{Type: "string", Format: "binary"}
+	if t == reflect.TypeFor[time.Time]() {
+		return Schema{Type: "string", Format: "date-time"}
 	}
 
 	switch t.Kind() {
@@ -287,13 +300,22 @@ func (g *generator) reflectToSchema(t reflect.Type) Schema {
 		return Schema{Type: "string"}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return Schema{Type: "integer"}
+	case reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64,
+		reflect.Uintptr:
+		return Schema{Type: "integer", Format: "uint64"}
 	case reflect.Bool:
 		return Schema{Type: "boolean"}
 	case reflect.Float32, reflect.Float64:
 		return Schema{Type: "number"}
-	case reflect.Slice:
+	case reflect.Array, reflect.Slice:
 		items := g.reflectToSchema(t.Elem())
 		return Schema{Type: "array", Items: &items}
+	case reflect.Interface:
+		return Schema{}
 	case reflect.Struct:
 		name := t.Name()
 		if name == "" {
@@ -349,7 +371,9 @@ func (g *generator) applyValidation(s *Schema, tag string) {
 					s.Minimum = &v
 				}
 			} else if s.Type == "array" {
-				// Added in fix: support minItems
+				if v, err := strconv.Atoi(val); err == nil {
+					s.MinItems = &v
+				}
 			}
 		case "max":
 			if s.Type == "string" {
@@ -359,6 +383,10 @@ func (g *generator) applyValidation(s *Schema, tag string) {
 			} else if s.Type == "integer" || s.Type == "number" {
 				if v, err := strconv.ParseFloat(val, 64); err == nil {
 					s.Maximum = &v
+				}
+			} else if s.Type == "array" {
+				if v, err := strconv.Atoi(val); err == nil {
+					s.MaxItems = &v
 				}
 			}
 		case "email":
@@ -397,9 +425,14 @@ func (g *generator) applyValidation(s *Schema, tag string) {
 }
 
 func (g *generator) buildStructSchema(t reflect.Type) Schema {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
 	s := Schema{Type: "object", Properties: make(map[string]Schema)}
 	for f := range t.Fields() {
-		f := f
+		if f.PkgPath != "" {
+			continue
+		}
 
 		// Support embedded fields
 		if f.Anonymous && f.Tag.Get("json") == "" {
@@ -414,9 +447,13 @@ func (g *generator) buildStructSchema(t reflect.Type) Schema {
 			continue
 		}
 		name := f.Name
+		omitEmpty := false
 		if tag != "" {
 			if before, _, ok := strings.Cut(tag, ","); ok {
-				name = before
+				if before != "" {
+					name = before
+				}
+				omitEmpty = strings.Contains(tag, ",omitempty")
 			} else {
 				name = tag
 			}
@@ -427,7 +464,7 @@ func (g *generator) buildStructSchema(t reflect.Type) Schema {
 		if ex := f.Tag.Get("example"); ex != "" {
 			propSchema.Example = ex
 		}
-		if f.Type.Kind() != reflect.Pointer {
+		if f.Type.Kind() != reflect.Pointer && !omitEmpty {
 			s.Required = append(s.Required, name)
 		}
 		s.Properties[name] = propSchema

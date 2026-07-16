@@ -243,6 +243,26 @@ func TestCircuitBreakerMiddleware_5xxCounts(t *testing.T) {
 	}
 }
 
+func TestCircuitBreakerMiddleware_IgnoresDuplicateStatusWrites(t *testing.T) {
+	cb := NewCircuitBreaker(CircuitBreakerConfig{FailureThreshold: 1})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusOK)
+	})
+	mw := CircuitBreakerMiddleware(cb)(handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	mw.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected first status to win, got %d", rec.Code)
+	}
+	if cb.State() != StateOpen {
+		t.Fatalf("expected the first 500 to trip the breaker, got %s", cb.State())
+	}
+}
+
 func TestCircuitBreakerMiddleware_CustomFailureFn(t *testing.T) {
 	// Count 429 as failures too
 	cb := NewCircuitBreaker(CircuitBreakerConfig{

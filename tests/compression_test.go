@@ -152,6 +152,33 @@ func TestCompressionMiddleware(t *testing.T) {
 		}
 	})
 
+	t.Run("BrotliWildcard", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Accept-Encoding", "gzip, *;q=0.5")
+		rec := httptest.NewRecorder()
+
+		app.ServeHTTP(rec, req)
+
+		if rec.Header().Get("Content-Encoding") != "br" {
+			t.Errorf(
+				"expected wildcard to allow Brotli, got %s",
+				rec.Header().Get("Content-Encoding"),
+			)
+		}
+	})
+
+	t.Run("ExplicitZeroOverridesWildcard", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Accept-Encoding", "br;q=0, *;q=1")
+		rec := httptest.NewRecorder()
+
+		app.ServeHTTP(rec, req)
+
+		if rec.Header().Get("Content-Encoding") == "br" {
+			t.Fatal("explicit br;q=0 must override wildcard acceptance")
+		}
+	})
+
 	t.Run("NonCompressibleType", func(t *testing.T) {
 		// Register a route that returns an image (mocked)
 		aku.Get(app, "/image", func(ctx context.Context, in In) (aku.Stream, error) {

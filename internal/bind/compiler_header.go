@@ -39,7 +39,7 @@ func compileHeader(sectionIdx int, typ reflect.Type) (internalExtractor, []Param
 					continue
 				}
 
-				if _, ok := consumed[k]; !ok {
+				if _, ok := consumed[http.CanonicalHeaderKey(k)]; !ok {
 					return &BindError{
 						Field:  k,
 						Source: "header",
@@ -51,6 +51,18 @@ func compileHeader(sectionIdx int, typ reflect.Type) (internalExtractor, []Param
 
 		return nil
 	}, params
+}
+
+func headerValues(header http.Header, name string) []string {
+	if values := header.Values(name); len(values) > 0 {
+		return values
+	}
+	for key, values := range header {
+		if strings.EqualFold(key, name) {
+			return values
+		}
+	}
+	return nil
 }
 
 func isStandardHeader(h string) bool {
@@ -76,6 +88,9 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 		tag := field.Tag.Get("header")
 		if tag == "" {
 			continue
@@ -108,7 +123,8 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 					// Only allocate/recurse if there's actually data for this struct
 					found := false
 					for k := range h {
-						if len(k) > len(subPrefix) && k[:len(subPrefix)] == subPrefix {
+						if len(k) > len(subPrefix) &&
+							strings.EqualFold(k[:len(subPrefix)], subPrefix) {
 							found = true
 							if consumed != nil {
 								// Sub-steps will mark individual keys
@@ -159,8 +175,8 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 			steps = append(
 				steps,
 				func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
-					vals, ok := header[fieldName]
-					if ok {
+					vals := headerValues(header, fieldName)
+					if len(vals) > 0 {
 						if consumed != nil {
 							consumed[http.CanonicalHeaderKey(fieldName)] = struct{}{}
 						}
@@ -182,6 +198,7 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 			)
 		} else if isMap {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
+			keyCoercer := PrecompileCoercer(field.Type.Key())
 			mapTyp := field.Type
 			isPrefix := len(fieldName) > 0 && fieldName[len(fieldName)-1] == '-'
 			steps = append(steps, func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
@@ -191,36 +208,44 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 					if isPrefix {
 						if len(k) > len(fieldName) && strings.EqualFold(k[:len(fieldName)], fieldName) {
 							if consumed != nil {
-								consumed[k] = struct{}{}
+								consumed[http.CanonicalHeaderKey(k)] = struct{}{}
 							}
 							if len(vals) == 0 {
 								continue
 							}
 							key := k[len(fieldName):]
 							val := vals[0]
+							keyVal := reflect.New(mapTyp.Key()).Elem()
+							if err := keyCoercer(key, keyVal); err != nil {
+								return &BindError{Field: k, Source: "header", Err: err}
+							}
 							valVal := reflect.New(mapTyp.Elem()).Elem()
 							if err := elemCoercer(val, valVal); err != nil {
 								return &BindError{Field: k, Source: "header", Err: err}
 							}
-							m.SetMapIndex(reflect.ValueOf(key), valVal)
+							m.SetMapIndex(keyVal, valVal)
 							found = true
 						}
 					} else {
 						mapPrefix := fieldName + "["
 						if len(k) > len(mapPrefix)+1 && strings.EqualFold(k[:len(mapPrefix)], mapPrefix) && k[len(k)-1] == ']' {
 							if consumed != nil {
-								consumed[k] = struct{}{}
+								consumed[http.CanonicalHeaderKey(k)] = struct{}{}
 							}
 							if len(vals) == 0 {
 								continue
 							}
 							key := k[len(mapPrefix) : len(k)-1]
 							val := vals[0]
+							keyVal := reflect.New(mapTyp.Key()).Elem()
+							if err := keyCoercer(key, keyVal); err != nil {
+								return &BindError{Field: k, Source: "header", Err: err}
+							}
 							valVal := reflect.New(mapTyp.Elem()).Elem()
 							if err := elemCoercer(val, valVal); err != nil {
 								return &BindError{Field: k, Source: "header", Err: err}
 							}
-							m.SetMapIndex(reflect.ValueOf(key), valVal)
+							m.SetMapIndex(keyVal, valVal)
 							found = true
 						}
 					}
@@ -235,8 +260,8 @@ func compileHeaderLevel(typ reflect.Type, prefix string) ([]headerStep, []Parame
 		} else {
 			coercer := PrecompileCoercer(field.Type)
 			steps = append(steps, func(header http.Header, v reflect.Value, consumed map[string]struct{}) error {
-				vals, ok := header[fieldName]
-				if ok {
+				vals := headerValues(header, fieldName)
+				if len(vals) > 0 {
 					if consumed != nil {
 						consumed[http.CanonicalHeaderKey(fieldName)] = struct{}{}
 					}

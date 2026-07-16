@@ -285,15 +285,32 @@ func (g *CircuitBreakerGroup) All() map[string]State {
 
 type statusCapture struct {
 	http.ResponseWriter
-	code int
+	code        int
+	wroteHeader bool
 }
 
 func (w *statusCapture) WriteHeader(code int) {
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
 	w.code = code
 	w.ResponseWriter.WriteHeader(code)
 }
 
+func (w *statusCapture) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.wroteHeader = true
+		w.code = http.StatusOK
+	}
+	return w.ResponseWriter.Write(b)
+}
+
 func (w *statusCapture) Flush() {
+	if !w.wroteHeader {
+		w.wroteHeader = true
+		w.code = http.StatusOK
+	}
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
@@ -304,6 +321,7 @@ func (w *statusCapture) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if !ok {
 		return nil, nil, http.ErrNotSupported
 	}
+	w.wroteHeader = true
 	w.code = http.StatusSwitchingProtocols
 	return h.Hijack()
 }

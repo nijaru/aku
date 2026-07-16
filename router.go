@@ -3,6 +3,7 @@ package aku
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -108,6 +109,12 @@ func register[In any, Out any](
 ) error {
 	app := r.App()
 	meta := defaultRouteMeta()
+	if handler == nil {
+		return errors.New("handler must not be nil")
+	}
+	if err := bind.Validate[In](); err != nil {
+		return err
+	}
 
 	// Compile the extractor and schema once at startup.
 	extractor, schema := bind.Compiler[In]()
@@ -310,27 +317,56 @@ func register[In any, Out any](
 		),
 	}
 
-	// Auto-register security schemes from auth extraction.
-	for _, auth := range schema.Auth {
-		s := SecurityScheme{
+	// Register with the router.
+	if err := registerRoute(r, method, pattern, finalHandler, route); err != nil {
+		return err
+	}
+	registerAuthSecurity(app, route, schema.Auth)
+
+	return nil
+}
+
+func registerRoute(
+	r Router,
+	method, pattern string,
+	handler http.Handler,
+	route *Route,
+) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("register %s route %q: %v", method, pattern, recovered)
+		}
+	}()
+	r.Handle(method, pattern, handler, route)
+	return nil
+}
+
+func registerAuthSecurity(app *App, route *Route, auths []bind.AuthScheme) {
+	if len(auths) == 0 {
+		return
+	}
+
+	required := make(map[string][]string)
+	for _, auth := range auths {
+		app.AddSecurityScheme(auth.Name, SecurityScheme{
 			Type:         auth.Type,
 			Description:  auth.Description,
 			Scheme:       auth.Scheme,
 			BearerFormat: auth.BearerFmt,
 			In:           auth.In,
 			Name:         auth.ParamName,
-		}
-		app.AddSecurityScheme(auth.Name, s)
-		// Auto-add security requirement if route doesn't already have one.
-		if len(route.Security) == 0 {
-			route.Security = append(route.Security, map[string][]string{auth.Name: {}})
+		})
+		if auth.Required {
+			required[auth.Name] = []string{}
 		}
 	}
 
-	// Register with the router.
-	r.Handle(method, pattern, finalHandler, route)
-
-	return nil
+	// Multiple required credentials are an AND relationship in OpenAPI, so
+	// represent them in one security requirement object. Explicit route
+	// security options remain authoritative.
+	if len(route.Security) == 0 && len(required) > 0 {
+		route.Security = []map[string][]string{required}
+	}
 }
 
 func handleError(app *App, w http.ResponseWriter, r *http.Request, err error) {
@@ -355,7 +391,7 @@ func handleError(app *App, w http.ResponseWriter, r *http.Request, err error) {
 		)
 	} else {
 		// Default behavior for non-Problem errors
-		render.Problem(w, http.StatusInternalServerError, problem.Problemf(http.StatusInternalServerError, "Internal Server Error", "%s", err.Error()))
+		render.Problem(w, http.StatusInternalServerError, problem.InternalServerError("internal server error"))
 	}
 }
 

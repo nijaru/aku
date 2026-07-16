@@ -17,7 +17,9 @@ func compileCtx(
 	typ reflect.Type,
 ) (func(context.Context, *http.Request, reflect.Value, *Config) error, []Parameter) {
 	if typ.Kind() != reflect.Struct {
-		return nil, nil
+		return func(ctx context.Context, r *http.Request, v reflect.Value, cfg *Config) error {
+			return nil
+		}, nil
 	}
 
 	var extractors []func(context.Context, reflect.Value, *Config) error
@@ -25,6 +27,9 @@ func compileCtx(
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 		tag := field.Tag.Get("ctx")
 		if tag == "" {
 			continue

@@ -21,10 +21,7 @@ type Cursor struct {
 // Params returns offset and limit with clamping/defaults applied.
 // Offset is clamped to >=0. Limit defaults to 20 and is capped at 100.
 func (p Page) Params() (offset, limit int) {
-	offset = p.Offset
-	if offset < 0 {
-		offset = 0
-	}
+	offset = max(p.Offset, 0)
 	limit = p.Limit
 	if limit <= 0 {
 		limit = 20
@@ -131,10 +128,7 @@ func BuildPageLinks(rawURL string, offset, limit int, total int64) Links {
 		links.Next = buildPageURL(rawURL, offset+limit, limit)
 	}
 	if hasPrev {
-		prevOffset := offset - limit
-		if prevOffset < 0 {
-			prevOffset = 0
-		}
+		prevOffset := max(offset-limit, 0)
 		links.Prev = buildPageURL(rawURL, prevOffset, limit)
 	}
 

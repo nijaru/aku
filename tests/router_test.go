@@ -3,6 +3,7 @@ package aku_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -51,6 +52,72 @@ func TestRegister(t *testing.T) {
 
 	if out.ID != 123 {
 		t.Errorf("expected ID 123, got %d", out.ID)
+	}
+}
+
+func TestRegisterRejectsUnsupportedInputTypes(t *testing.T) {
+	app := aku.New()
+	type In struct {
+		Query struct {
+			Value chan int `query:"value"`
+		}
+	}
+
+	err := aku.Get(app, "/unsupported", func(ctx context.Context, in In) (struct{}, error) {
+		return struct{}{}, nil
+	})
+	if err == nil {
+		t.Fatal("expected unsupported tagged type to fail at registration")
+	}
+	if !strings.Contains(err.Error(), "unsupported type") {
+		t.Fatalf("unexpected registration error: %v", err)
+	}
+
+	type BadSection struct {
+		Query string
+	}
+	err = aku.Get(app, "/bad-section", func(ctx context.Context, in BadSection) (struct{}, error) {
+		return struct{}{}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "Query section must be a struct") {
+		t.Fatalf("expected invalid Query section to fail at registration, got %v", err)
+	}
+}
+
+func TestRegisterRejectsConflictingRoutes(t *testing.T) {
+	app := aku.New()
+	handler := func(ctx context.Context, in struct{}) (struct{}, error) {
+		return struct{}{}, nil
+	}
+
+	if err := aku.Get(app, "/conflict", handler); err != nil {
+		t.Fatalf("unexpected first registration error: %v", err)
+	}
+	if err := aku.Get(app, "/conflict", handler); err == nil {
+		t.Fatal("expected conflicting route registration to return an error")
+	}
+}
+
+func TestFlushCommitsSuccessfulStatus(t *testing.T) {
+	app := aku.New()
+	app.HandleHTTP(
+		http.MethodGet,
+		"/flush",
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				t.Error("expected App to preserve http.Flusher")
+				return
+			}
+			flusher.Flush()
+			w.WriteHeader(http.StatusInternalServerError)
+		}),
+	)
+
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/flush", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected Flush to commit 200, got %d", rec.Code)
 	}
 }
 
@@ -127,6 +194,24 @@ func TestRegister_RejectsTrailingJSONBody(t *testing.T) {
 
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for trailing JSON body, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandlerErrorDoesNotLeakInternalDetail(t *testing.T) {
+	app := aku.New()
+	aku.Get(app, "/failure", func(ctx context.Context, in struct{}) (struct{}, error) {
+		return struct{}{}, errors.New("database password: super-secret")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/failure", nil)
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "super-secret") {
+		t.Fatalf("handler error detail leaked in response: %s", rec.Body.String())
 	}
 }
 

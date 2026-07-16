@@ -17,21 +17,23 @@ type scalarQueryStep struct {
 	required bool
 }
 
-func rawQueryLookup(raw, key string) string {
+func rawQueryLookup(raw, key string) (string, bool) {
 	for raw != "" {
 		var pair string
-		if i := strings.IndexByte(raw, '&'); i >= 0 {
-			pair, raw = raw[:i], raw[i+1:]
+		if before, after, ok := strings.Cut(raw, "&"); ok {
+			pair, raw = before, after
 		} else {
 			pair, raw = raw, ""
 		}
 		k, v, _ := strings.Cut(pair, "=")
-		if k == key {
-			val, _ := url.QueryUnescape(v)
-			return val
+		decodedKey, err := url.QueryUnescape(k)
+		if err != nil || decodedKey != key {
+			continue
 		}
+		val, _ := url.QueryUnescape(v)
+		return val, true
 	}
-	return ""
+	return "", false
 }
 
 func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]struct{}, []Parameter) {
@@ -41,6 +43,9 @@ func tryCompileScalarQuery(typ reflect.Type) ([]scalarQueryStep, map[string]stru
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 		tag := field.Tag.Get("query")
 		if tag == "" {
 			continue
@@ -97,8 +102,8 @@ func compileQuery(sectionIdx int, typ reflect.Type) (internalExtractor, []Parame
 			raw := r.URL.RawQuery
 
 			for _, step := range scalarSteps {
-				val := rawQueryLookup(raw, step.name)
-				if val != "" {
+				val, ok := rawQueryLookup(raw, step.name)
+				if ok && val != "" {
 					if err := step.coercer(val, section.Field(step.fieldIdx)); err != nil {
 						return &BindError{Field: step.name, Source: "query", Err: err}
 					}
@@ -165,6 +170,9 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 		tag := field.Tag.Get("query")
 		if tag == "" {
 			continue
@@ -250,7 +258,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 				steps,
 				func(query url.Values, v reflect.Value, consumed map[string]struct{}) error {
 					vals, ok := query[fieldName]
-					if ok {
+					if ok && len(vals) > 0 {
 						if consumed != nil {
 							consumed[fieldName] = struct{}{}
 						}
@@ -272,6 +280,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 			)
 		} else if isMap {
 			elemCoercer := PrecompileCoercer(field.Type.Elem())
+			keyCoercer := PrecompileCoercer(field.Type.Key())
 			mapTyp := field.Type
 			steps = append(steps, func(query url.Values, v reflect.Value, consumed map[string]struct{}) error {
 				// Support name[key]=val pattern for maps
@@ -288,11 +297,15 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 							continue
 						}
 						val := vals[0] // take first for map
+						keyVal := reflect.New(mapTyp.Key()).Elem()
+						if err := keyCoercer(key, keyVal); err != nil {
+							return &BindError{Field: fieldName + "[" + key + "]", Source: "query", Err: err}
+						}
 						valVal := reflect.New(mapTyp.Elem()).Elem()
 						if err := elemCoercer(val, valVal); err != nil {
 							return &BindError{Field: fieldName + "[" + key + "]", Source: "query", Err: err}
 						}
-						m.SetMapIndex(reflect.ValueOf(key), valVal)
+						m.SetMapIndex(keyVal, valVal)
 						found = true
 					}
 				}
@@ -307,7 +320,7 @@ func compileQueryLevel(typ reflect.Type, prefix string) ([]queryStep, []Paramete
 			coercer := PrecompileCoercer(field.Type)
 			steps = append(steps, func(query url.Values, v reflect.Value, consumed map[string]struct{}) error {
 				vals, ok := query[fieldName]
-				if ok {
+				if ok && len(vals) > 0 {
 					if consumed != nil {
 						consumed[fieldName] = struct{}{}
 					}

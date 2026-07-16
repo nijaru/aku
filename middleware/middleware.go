@@ -188,17 +188,23 @@ func CORS(opts CORSOptions) func(http.Handler) http.Handler {
 
 type loggingResponseWriter struct {
 	http.ResponseWriter
-	status int
-	size   int
+	status      int
+	size        int
+	wroteHeader bool
 }
 
 func (w *loggingResponseWriter) WriteHeader(status int) {
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
 }
 
 func (w *loggingResponseWriter) Write(b []byte) (int, error) {
-	if w.status == 0 {
+	if !w.wroteHeader {
+		w.wroteHeader = true
 		w.status = http.StatusOK
 	}
 	n, err := w.ResponseWriter.Write(b)
@@ -207,6 +213,10 @@ func (w *loggingResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (w *loggingResponseWriter) Flush() {
+	if !w.wroteHeader {
+		w.wroteHeader = true
+		w.status = http.StatusOK
+	}
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
@@ -217,6 +227,7 @@ func (w *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if !ok {
 		return nil, nil, http.ErrNotSupported
 	}
+	w.wroteHeader = true
 	w.status = http.StatusSwitchingProtocols
 	return h.Hijack()
 }
@@ -280,7 +291,9 @@ func (w *brotliResponseWriter) WriteHeader(status int) {
 	w.wrote = true
 
 	ct := w.Header().Get("Content-Type")
-	if isCompressible(ct) {
+	if status != http.StatusNoContent && status != http.StatusNotModified &&
+		w.Header().Get("Content-Encoding") == "" &&
+		w.Header().Get("Content-Length") == "" && isCompressible(ct) {
 		w.Header().Set("Content-Encoding", "br")
 		addVary(w.Header(), "Accept-Encoding")
 		w.ResponseWriter.WriteHeader(status)
@@ -305,6 +318,12 @@ func (w *brotliResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (w *brotliResponseWriter) Flush() {
+	if !w.wrote {
+		w.WriteHeader(http.StatusOK)
+	}
+	if w.Header().Get("Content-Encoding") == "br" {
+		_ = w.writer.Flush()
+	}
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
@@ -515,6 +534,9 @@ func isCompressible(ct string) bool {
 }
 
 func acceptsEncoding(header, target string) bool {
+	var targetQ, wildcardQ float64
+	targetSet, wildcardSet := false, false
+
 	for part := range strings.SplitSeq(header, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
@@ -522,29 +544,34 @@ func acceptsEncoding(header, target string) bool {
 		}
 
 		coding, params, _ := strings.Cut(part, ";")
-		if !strings.EqualFold(strings.TrimSpace(coding), target) {
-			continue
-		}
-		if params == "" {
-			return true
-		}
-
-		allowed := true
+		coding = strings.TrimSpace(coding)
+		q := 1.0
 		for param := range strings.SplitSeq(params, ";") {
 			key, value, ok := strings.Cut(strings.TrimSpace(param), "=")
 			if !ok || !strings.EqualFold(key, "q") {
 				continue
 			}
-			q, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-			if err == nil && q <= 0 {
-				allowed = false
+			parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err != nil || parsed < 0 || parsed > 1 {
+				q = 0
+			} else {
+				q = parsed
 			}
+			break
 		}
-		if allowed {
-			return true
+
+		switch {
+		case strings.EqualFold(coding, target):
+			targetQ, targetSet = q, true
+		case coding == "*":
+			wildcardQ, wildcardSet = q, true
 		}
 	}
-	return false
+
+	if targetSet {
+		return targetQ > 0
+	}
+	return wildcardSet && wildcardQ > 0
 }
 
 func addVary(h http.Header, field string) {

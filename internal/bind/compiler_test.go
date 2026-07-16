@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/nijaru/aku/internal/bind"
@@ -107,6 +109,87 @@ func TestCompiler_SliceFields(t *testing.T) {
 	// Verify Header Slice
 	if len(in.Header.Values) != 2 || in.Header.Values[0] != 10 || in.Header.Values[1] != 20 {
 		t.Errorf("unexpected Header.Values: %v", in.Header.Values)
+	}
+}
+
+func TestCompiler_QueryFastPathDecodesEncodedKey(t *testing.T) {
+	type Request struct {
+		Query struct {
+			Filter string `query:"filter[name]"`
+		}
+	}
+
+	extractor, _ := bind.Compiler[Request]()
+	req := httptest.NewRequest(http.MethodGet, "/?filter%5Bname%5D=aku", nil)
+	var in Request
+
+	if err := extractor(context.Background(), req, &in, reflect.ValueOf(&in).Elem(), &bind.Config{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if in.Query.Filter != "aku" {
+		t.Fatalf("expected decoded query key to bind, got %q", in.Query.Filter)
+	}
+}
+
+func TestCompiler_HeaderLookupIsCaseInsensitive(t *testing.T) {
+	type Request struct {
+		Header struct {
+			APIKey string `header:"x-api-key"`
+		}
+	}
+
+	extractor, _ := bind.Compiler[Request]()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-API-KEY", "secret")
+	var in Request
+
+	if err := extractor(context.Background(), req, &in, reflect.ValueOf(&in).Elem(), &bind.Config{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if in.Header.APIKey != "secret" {
+		t.Fatalf("expected case-insensitive header lookup, got %q", in.Header.APIKey)
+	}
+}
+
+func TestCompiler_MapKeyCoercion(t *testing.T) {
+	type Request struct {
+		Query struct {
+			Values map[int]string `query:"value"`
+		}
+	}
+
+	extractor, _ := bind.Compiler[Request]()
+	req := httptest.NewRequest(http.MethodGet, "/?value%5B42%5D=aku", nil)
+	var in Request
+
+	if err := extractor(context.Background(), req, &in, reflect.ValueOf(&in).Elem(), &bind.Config{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if in.Query.Values[42] != "aku" {
+		t.Fatalf("expected integer map key to bind, got %#v", in.Query.Values)
+	}
+}
+
+func TestCompiler_RequiredFileNeedsMultipartValue(t *testing.T) {
+	type Request struct {
+		Form struct {
+			Upload *multipart.FileHeader `form:"upload" aku:"required"`
+		}
+	}
+
+	extractor, _ := bind.Compiler[Request]()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	var in Request
+
+	err := extractor(
+		context.Background(),
+		req,
+		&in,
+		reflect.ValueOf(&in).Elem(),
+		&bind.Config{MaxMultipartMemory: 1 << 20},
+	)
+	if err == nil || !strings.Contains(err.Error(), "upload") {
+		t.Fatalf("expected missing required file error, got %v", err)
 	}
 }
 

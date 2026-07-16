@@ -74,7 +74,13 @@ func TestRouter_Static(t *testing.T) {
 
 func TestGroup_Static(t *testing.T) {
 	app := aku.New()
-	v1 := app.Group("/v1")
+	var middlewareCalls int
+	v1 := app.Group("/v1", func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			middlewareCalls++
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	tmpDir, _ := os.MkdirTemp("", "aku-group-static-test")
 	defer os.RemoveAll(tmpDir)
@@ -92,5 +98,8 @@ func TestGroup_Static(t *testing.T) {
 	}
 	if w.Body.String() != "v1 content" {
 		t.Errorf("Expected 'v1 content', got %q", w.Body.String())
+	}
+	if middlewareCalls != 1 {
+		t.Fatalf("expected group middleware to wrap static route, got %d calls", middlewareCalls)
 	}
 }

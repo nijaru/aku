@@ -20,7 +20,6 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 
 	type authStep struct {
 		fieldIdx int
-		fieldTyp reflect.Type
 		authType string // "bearer" | "apikey"
 		paramKey string // the tag value (e.g. scheme name or header/query param name)
 		location string // "header" | "query" (for apikey)
@@ -32,6 +31,9 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 
 		// Bearer token — special handling by type name
 		authTag := field.Tag.Get("auth")
@@ -49,19 +51,19 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 					name = "bearerAuth"
 				}
 			}
+			required := fieldRequired(field)
 			steps = append(steps, authStep{
 				fieldIdx: i,
-				fieldTyp: fTyp,
 				authType: "bearer",
 				paramKey: name,
-				required: fTyp.Kind() != reflect.Pointer,
+				required: required,
 			})
 			schemes = append(schemes, AuthScheme{
 				Name:        name,
 				Type:        "http",
 				Scheme:      "bearer",
 				BearerFmt:   "JWT",
-				Required:    fTyp.Kind() != reflect.Pointer,
+				Required:    required,
 				Description: fmt.Sprintf("Bearer token authentication (%s)", name),
 			})
 			continue
@@ -75,6 +77,10 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 			}
 			location := parts[1] // "header" or "query"
 			paramKey := parts[2] // the header or query parameter name
+			if (location != "header" && location != "query") || paramKey == "" {
+				continue
+			}
+			required := fieldRequired(field)
 
 			name := field.Name
 			if name == "" {
@@ -83,18 +89,17 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 
 			steps = append(steps, authStep{
 				fieldIdx: i,
-				fieldTyp: fTyp,
 				authType: "apikey",
 				paramKey: paramKey,
 				location: location,
-				required: fTyp.Kind() != reflect.Pointer,
+				required: required,
 			})
 			schemes = append(schemes, AuthScheme{
 				Name:        name,
 				Type:        "apiKey",
 				In:          location,
 				ParamName:   paramKey,
-				Required:    fTyp.Kind() != reflect.Pointer,
+				Required:    required,
 				Description: fmt.Sprintf("API key authentication via %s %s", location, paramKey),
 			})
 			continue
@@ -102,20 +107,20 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 
 		// Fallback: if the type has String() method or is a string, treat as apikey:header
 		if fTyp.Kind() == reflect.String && authTag != "" {
+			required := fieldRequired(field)
 			steps = append(steps, authStep{
 				fieldIdx: i,
-				fieldTyp: fTyp,
 				authType: "apikey",
 				paramKey: authTag,
 				location: "header",
-				required: true,
+				required: required,
 			})
 			schemes = append(schemes, AuthScheme{
 				Name:        field.Name,
 				Type:        "apiKey",
 				In:          "header",
 				ParamName:   authTag,
-				Required:    true,
+				Required:    required,
 				Description: fmt.Sprintf("API key authentication via %s header", authTag),
 			})
 		}
@@ -141,8 +146,8 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 					}
 					continue
 				}
-				const prefix = "Bearer "
-				if !strings.HasPrefix(auth, prefix) {
+				parts := strings.SplitN(auth, " ", 2)
+				if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 					if step.required {
 						return &BindError{
 							Field:  step.paramKey,
@@ -152,7 +157,7 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 					}
 					continue
 				}
-				token := strings.TrimPrefix(auth, prefix)
+				token := parts[1]
 				if token == "" {
 					if step.required {
 						return &BindError{
@@ -174,7 +179,8 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 				if f.Kind() == reflect.Struct && f.CanAddr() {
 					// Try to set Token field if it's a struct with Token field
 					tokenField := f.FieldByName("Token")
-					if tokenField.IsValid() && tokenField.Kind() == reflect.String {
+					if tokenField.IsValid() && tokenField.CanSet() &&
+						tokenField.Kind() == reflect.String {
 						tokenField.SetString(token)
 						continue
 					}
@@ -189,7 +195,7 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 				case "header":
 					val = r.Header.Get(step.paramKey)
 				case "query":
-					val = rawQueryLookup(r.URL.RawQuery, step.paramKey)
+					val, _ = rawQueryLookup(r.URL.RawQuery, step.paramKey)
 				}
 
 				if val == "" {
@@ -213,7 +219,7 @@ func compileAuth(sectionIdx int, typ reflect.Type) (internalExtractor, []AuthSch
 					f.SetString(val)
 				} else if f.Kind() == reflect.Struct {
 					tokenField := f.FieldByName("Key")
-					if tokenField.IsValid() && tokenField.Kind() == reflect.String {
+					if tokenField.IsValid() && tokenField.CanSet() && tokenField.Kind() == reflect.String {
 						tokenField.SetString(val)
 					}
 				}

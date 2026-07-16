@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"sync"
 )
@@ -118,9 +119,7 @@ func (hc *HealthChecker) snapshot() map[string]CheckFunc {
 	defer hc.mu.RUnlock()
 
 	checks := make(map[string]CheckFunc, len(hc.checks))
-	for name, check := range hc.checks {
-		checks[name] = check
-	}
+	maps.Copy(checks, hc.checks)
 	return checks
 }
 

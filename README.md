@@ -1,7 +1,7 @@
 # Aku
 
 > [!IMPORTANT]
-> **Aku** is a high-performance, typesafe web framework for the latest stable Go release, currently Go 1.26.3, designed specifically for building APIs.
+> **Aku** is a high-performance, typesafe web framework for the latest stable Go release, currently Go 1.26.5, designed specifically for building APIs.
 
 Aku bridges the gap between the standard library's `net/http` and the ergonomics of modern frameworks like FastAPI or Axum. It uses Go's type system to automate request extraction, validation, and documentation without sacrificing compatibility.
 
@@ -9,7 +9,7 @@ Aku bridges the gap between the standard library's `net/http` and the ergonomics
 
 - **Standard Library First**: Built on `net/http` and Go's modern `http.ServeMux`. Pure `http.Handler` compatibility.
 - **Typesafe Extraction**: Automatically map Path, Query, Header, Form, and Body into a single request struct.
-- **Zero-Reflect Hot Path**: Reflection is used at registration time to "compile" extraction plans; the request path is optimized for performance.
+- **Precompiled Extraction Plans**: Reflection inspects handler types at registration; request handling reuses the resulting binding plan and coercers.
 - **Automatic OpenAPI 3.0**: Generates documentation, including schemas and security requirements, from your Go types.
 - **Validation**: Built-in support for `go-playground/validator` tags and explicit `Validate() error` hooks.
 - **Streaming & SSE**: First-class support for `io.Reader` streaming and Server-Sent Events.
@@ -18,13 +18,13 @@ Aku bridges the gap between the standard library's `net/http` and the ergonomics
 
 ## Performance
 
-Aku is designed with a **Zero-Allocation Philosophy**. By leveraging Go's reflection only at route registration time, Aku "compiles" static extraction plans for every handler. At runtime, the request path uses these pre-compiled plans and `sync.Pool` to achieve performance that is nearly identical to hand-optimized `net/http` code.
+Aku is designed with a **low-allocation philosophy**. By inspecting Go types at route registration time, Aku precomputes extraction steps and coercers for every handler. At runtime, the request path reuses those plans and pooled input values. Field assignment still uses `reflect.Value`; the optimization is avoiding repeated type inspection and coercer construction, not code-generated zero-reflection execution.
 
-- **Pre-compiled Extraction**: No reflection in the request hot path.
+- **Pre-compiled Binding**: Avoids repeated reflection-based type inspection and conversion setup on each request.
 - **Buffer & Struct Reuse**: Extensive use of `sync.Pool` to minimize GC pressure.
 - **Standard Library Speed**: Built directly on `http.ServeMux` with minimal wrapping.
 
-*Benchmarks consistently show Aku adds minimal overhead (~100ns) compared to manually binding `net/http` handlers. See `benchmark_test.go` for the latest verified results.*
+*Benchmark results are environment-sensitive; see `benchmark_test.go` for the comparison suite and rerun it on your target hardware.*
 
 ## Quick Start
 
@@ -78,7 +78,7 @@ func main() {
 ## Development
 
 Aku targets the latest stable Go toolchain. The module currently requires Go
-1.26.3 so the framework can use current standard-library APIs and runtime
+1.26.5 so the framework can use current standard-library APIs and runtime
 improvements. Some underlying HTTP semantics come from Go 1.22-era `ServeMux`,
 but older toolchains are not a supported build target.
 
